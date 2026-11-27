@@ -1182,3 +1182,47 @@ dialog.lookup {
 .entry-dialog footer {
   margin-top: 18px;
 }
+.preview-modes {
+  display: flex;
+  gap: 6px;
+  padding: 7px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.preview-modes button {
+  border: 0;
+  font-size: 13px;
+  min-height: 32px;
+}
+.preview-modes [aria-pressed='true'] {
+  background: #dcece0;
+  color: var(--green);
+}
+.source-sections {
+  max-width: 840px;
+  margin: auto;
+  padding: 16px;
+}
+.source-sections article {
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 16px;
+  margin-bottom: 10px;
+}
+.source-sections article strong,
+.source-sections article button {
+  color: var(--green);
+  font-size: 13px;
+}
+.source-sections pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+  line-height: 1.65;
+  margin: 10px 0 0;
+}
+.source-sections footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}

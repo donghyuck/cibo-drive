@@ -1,5 +1,7 @@
 import pg from 'pg';
-import { S3Client } from '@aws-sdk/client-s3';
+import { startExtraction } from './document-text.js';
+import type { Readable } from 'node:stream';
+import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { migrate } from './database.js';
 import { driveRouter, googleVerifier } from './drive.js';
 import { createApp } from './app.js';
@@ -33,6 +35,14 @@ if (process.env.DATABASE_URL) {
       secretAccessKey: env.S3_SECRET_ACCESS_KEY,
     },
   });
+  startExtraction(db, async (key) => {
+    const response = await s3.send(
+      new GetObjectCommand({ Bucket: env.S3_BUCKET, Key: key }),
+      { abortSignal: AbortSignal.timeout(30000) },
+    );
+    if (!response.Body) throw new Error('Missing original');
+    return response.Body as Readable;
+  });
   app.use(
     '/api',
     driveRouter({
@@ -50,7 +60,9 @@ if (process.env.DATABASE_URL) {
     res.status(503).json({ error: '데이터베이스 설정이 필요합니다.' }),
   );
 }
-const host = enableLocalMcp ? '127.0.0.1' : (process.env.CIBO_API_HOST ?? '127.0.0.1');
+const host = enableLocalMcp
+  ? '127.0.0.1'
+  : (process.env.CIBO_API_HOST ?? '127.0.0.1');
 app.listen(port, host, () => {
   console.log(`Cibo API: http://${host}:${port}/healthz`);
   if (enableLocalMcp)

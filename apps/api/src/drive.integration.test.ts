@@ -1,11 +1,17 @@
 import assert from 'node:assert/strict';
+import { extractNext } from './document-text.js';
+import { Readable } from 'node:stream';
 import { once } from 'node:events';
 import { randomUUID } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
 import { test } from 'node:test';
 import pg from 'pg';
 import express from 'express';
-import { DeleteObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import {
+  DeleteObjectCommand,
+  GetObjectCommand,
+  S3Client,
+} from '@aws-sdk/client-s3';
 import { driveRouter, type Settings } from './drive.js';
 import { migrate } from './database.js';
 
@@ -178,6 +184,24 @@ test('team approval, space access and original file lifecycle', async (t) => {
   const saved = await upload('회의록.md', data);
   assert.equal(saved.status, 201);
   const { id } = await saved.json();
+  const extractOne = () =>
+    extractNext(db, async (key) => {
+      const object = await s3.send(
+        new GetObjectCommand({ Bucket: env.S3_BUCKET, Key: key }),
+      );
+      return object.Body as Readable;
+    });
+  const textUrl = 'files/' + id + '/text';
+  assert.equal((await request(textUrl, member)).status, 202);
+  assert.deepEqual((await Promise.all([extractOne(), extractOne()])).sort(), [
+    false,
+    true,
+  ]);
+  const firstText = await (await request(textUrl, member)).json();
+  assert.equal(firstText.status, 'ready');
+  assert.deepEqual(firstText.segments, [
+    { unit: 'line', start: 1, end: 1, text: '첫 문서' },
+  ]);
   assert.equal((await upload('회의록.md', '다른 내용')).status, 409);
   assert.deepEqual(
     (await (await request('folder?id=' + child, member)).json()).entries,
@@ -267,6 +291,7 @@ test('team approval, space access and original file lifecycle', async (t) => {
   assert.deepEqual((await search('100%'))[0].location, ['팀 문서 공간', '팀']);
   assert.equal((await change(child, 'trash')).status, 204);
   assert.equal((await change(parent, 'trash')).status, 204);
+  assert.equal((await request(textUrl, member)).status, 404);
   assert.deepEqual(await search('Report'), []);
   assert.deepEqual(await folderRows(root), []);
   assert.equal((await request(download, member)).status, 404);
@@ -318,7 +343,30 @@ test('team approval, space access and original file lifecycle', async (t) => {
     change(parent, 'move', { parent: sibling }),
   ]);
   assert.deepEqual(moves.map((r) => r.status).sort(), [204, 400]);
+  for (const [name, bytes, expected] of [
+    ['empty.txt', '   ', 'empty'],
+    ['invalid.pdf', 'not a PDF', 'failed'],
+  ]) {
+    const uploaded = await upload(name, bytes);
+    assert.equal(uploaded.status, 201);
+    const file = 'files/' + (await uploaded.json()).id;
+    assert.equal(await extractOne(), true);
+    const result = await (await request(file + '/text', member)).json();
+    assert.equal(result.status, expected);
+    assert.equal(await (await request(file, member)).text(), bytes);
+    if (expected === 'failed') {
+      assert.ok(result.reason);
+      assert.equal((await post(file + '/text/retry', member, {})).status, 204);
+      assert.equal((await request(file + '/text', member)).status, 202);
+      await extractOne();
+    }
+  }
+  assert.equal(
+    (await (await request(textUrl, member)).json()).name,
+    'Report_100%.md',
+  );
   await grant('active', 'editor', false);
+  assert.equal((await request(textUrl, member)).status, 403);
   assert.equal(
     (await request(preview, member, { headers: { Range: 'bytes=0-2' } }))
       .status,
@@ -377,6 +425,11 @@ test('legacy M1 records and relationships survive physical renaming', async () =
     );
     await migrate(db);
     await migrate(db);
+    assert.deepEqual(
+      (await db.query('SELECT artcl_idntfr,prcs_stts_cd FROM doc_artcl_txt'))
+        .rows,
+      [{ artcl_idntfr: file, prcs_stts_cd: 'processing' }],
+    );
     const { rows } = await db.query(
       `SELECT a.user_eml_addr, e.s3_objt_key, h.chg_hstry_sn
       FROM user_acnt a JOIN doc_space_acs_authrt m USING(acnt_idntfr)

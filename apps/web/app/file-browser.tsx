@@ -454,6 +454,7 @@ export function FileBrowser({
         <FilePreview
           key={preview.id}
           file={preview}
+          writable={writable}
           close={() => setPreview(null)}
         />
       )}

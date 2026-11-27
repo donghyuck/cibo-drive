@@ -15,3 +15,7 @@
 !apps/web/next.config.ts
 !deploy/
 !deploy/Caddyfile
+!apps/api/extraction/
+apps/api/extraction/**
+!apps/api/extraction/extract.py
+!apps/api/extraction/requirements.txt
