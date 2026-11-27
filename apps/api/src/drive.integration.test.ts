@@ -222,7 +222,7 @@ test('team approval, space access and original file lifecycle', async (t) => {
     });
   assert.equal((await upload('invalid.exe', 'sample')).status, 400);
   assert.equal(
-    (await upload('large.txt', 'x'.repeat(10 * 1024 * 1024 + 1))).status,
+    (await upload('large.txt', 'x'.repeat(30 * 1024 * 1024 + 1))).status,
     413,
   );
   s3.middlewareStack.add(
@@ -473,6 +473,19 @@ test('team approval, space access and original file lifecycle', async (t) => {
     (await (await request(textUrl, member)).json()).name,
     'Report_100%.md',
   );
+  const maxBytes = 30 * 1024 * 1024;
+  const exact = await upload('boundary.txt', 'a'.repeat(maxBytes - 1) + 'Z');
+  assert.equal(exact.status, 201);
+  const boundary = await exact.json();
+  const lastByte = await request('files/' + boundary.id + '/preview', member, {
+    headers: { Range: 'bytes=-1' },
+  });
+  assert.equal(lastByte.status, 206);
+  assert.equal(
+    lastByte.headers.get('content-range'),
+    `bytes ${maxBytes - 1}-${maxBytes - 1}/${maxBytes}`,
+  );
+  assert.equal(await lastByte.text(), 'Z');
   await grant('active', 'editor', false);
   assert.equal(await mcpStatus(headers), 403);
   assert.equal((await request(textUrl, member)).status, 403);

@@ -21,7 +21,7 @@ import { EntryTools, SpaceLookup, type DriveItem } from './entry-tools';
 import { FilePreview } from './file-preview';
 import { api, post } from './drive-api';
 
-const maxFileMiB = 10;
+const maxFileMiB = 30;
 const uploadHint = `파일당 최대 ${maxFileMiB} MiB · PDF, DOCX, TXT, MD`;
 
 export type Folder = {

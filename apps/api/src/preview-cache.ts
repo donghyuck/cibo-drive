@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Readable } from 'node:stream';
 
-const maxBytes = 10 * 1024 * 1024;
+const maxBytes = 30 * 1024 * 1024;
 const lifetimeMs = 5 * 60_000;
 type DiskFile = { handle: FileHandle; size: number };
 type Entry = {

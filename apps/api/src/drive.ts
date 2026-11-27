@@ -238,7 +238,7 @@ export function driveRouter(settings: Settings) {
   });
   router.post(
     '/files',
-    express.raw({ type: 'application/octet-stream', limit: '10mb' }),
+    express.raw({ type: 'application/octet-stream', limit: '30mb' }),
     async (req, res) => {
       const name = nameOf(req.query.name);
       if (
@@ -392,7 +392,7 @@ export function driveRouter(settings: Settings) {
           : status === 409
             ? '같은 이름이 있습니다.'
             : status === 413
-              ? '10 MiB 이하 파일을 선택하세요.'
+              ? '30 MiB 이하 파일을 선택하세요.'
               : '요청을 처리할 수 없습니다.',
     });
   }) satisfies express.ErrorRequestHandler);

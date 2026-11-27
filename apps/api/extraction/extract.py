@@ -8,7 +8,7 @@ import zipfile
 from defusedxml import ElementTree as ET
 from pypdf import PdfReader
 
-MAX_INPUT = 10 * 1024 * 1024
+MAX_INPUT = 30 * 1024 * 1024
 MAX_XML = 8 * 1024 * 1024
 
 
