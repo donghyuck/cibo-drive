@@ -34,5 +34,7 @@
 | 컬럼 | `changes.action` | `chg_hstry.job_type_cd` | 표준단어 조합 · 작업 + 유형 + 코드 |
 | 컬럼 | `changes.target` | `chg_hstry.trgt_idntfr` | 표준단어 조합 · 대상 + 식별자 |
 | 컬럼 | `changes.recorded_at` | `chg_hstry.rcd_dt` | 등록 용어 기록일시 · RCD_DT · 연월일시분초D |
+| 신규 컬럼 | — | `doc_artcl.del_dt` | 삭제일시 · DEL_DT · 논리 삭제 시각 |
+| 신규 컬럼 | — | `doc_artcl.del_grp_idntfr` | 프로젝트 조합 · 삭제 + 그룹 + 식별자 · 함께 복원하는 하위 트리 루트 ID |
 
 `space`는 팀의 문서 공간을 가리키는 프로젝트 단어다. OIDC의 발급자·사용자 클레임, 세션 토큰의 해시 알고리즘, S3 객체 키는 연동 규격상의 의미를 보존한다. 내부 계정 UUID에는 식별자(IDNTFR)를 사용한다. 파일·폴더 항목명은 기존 최대 200자 정책을 유지하므로 명V100과 길이가 다르다. 계정 상태·역할의 실제 코드값은 프로젝트에서 관리한다.
