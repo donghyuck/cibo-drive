@@ -27,7 +27,7 @@ test('team approval, space access and original file lifecycle', async (t) => {
   });
   const s3 = new S3Client({
     endpoint: env.S3_ENDPOINT,
-    region: 'us-east-1',
+    region: env.S3_REGION ?? 'us-east-1',
     forcePathStyle: true,
     credentials: {
       accessKeyId: env.S3_ACCESS_KEY_ID,
@@ -155,10 +155,9 @@ test('team approval, space access and original file lifecycle', async (t) => {
       [id],
     )
   ).rows[0].object_key;
-  assert.equal(
-    (await fetch(env.S3_ENDPOINT + '/' + env.S3_BUCKET + '/' + key)).status,
-    403,
-  );
+  const anonymous = await fetch(env.S3_ENDPOINT + '/' + env.S3_BUCKET + '/' + key);
+  // Private S3 implementations can deny access or conceal object existence.
+  assert.ok([403, 404].includes(anonymous.status), 'anonymous object read must be denied');
   const download = 'files/' + id;
   assert.equal(await (await request(download, member)).text(), data);
   await grant('active', 'viewer', true);

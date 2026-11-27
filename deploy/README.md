@@ -4,6 +4,12 @@
 
 로컬에서 앱을 실행하고 유휴 서버에는 원본만 보관하려면 [SeaweedFS 단독 배포](storage/README.md)를 사용한다.
 
+## OCI Object Storage에 직접 연결
+
+로컬 웹·API와 기존 PostgreSQL을 사용하는 경우 원본을 OCI의 비공개 Standard 버킷에 저장할 수 있다. 루트 `.env`의 `S3_ENDPOINT`에는 `https://<namespace>.compat.objectstorage.ap-seoul-1.oci.customer-oci.com`, `S3_REGION`에는 `ap-seoul-1`, `S3_BUCKET`에는 전용 버킷명을 입력한다. 앱 전용 IAM 사용자의 Customer Secret Key 쌍을 `S3_ACCESS_KEY_ID`와 `S3_SECRET_ACCESS_KEY`에 설정한다. 키 파일 권한을 600으로 제한하고, 같은 환경 파일의 OCI 키를 개발용 SeaweedFS 컨테이너에 전달하지 않는다.
+
+저장소 연결은 `npm run infra:check`로 확인한다. `npm run test:drive`는 지정한 DB에 임시 스키마를 만들고 지정한 버킷에 시험 객체를 쓴 뒤 정리한다. API는 `npm run dev`를 다시 시작할 때 새 환경을 읽는다.
+
 ## 기존 DB를 사용해 로컬에서 먼저 운영하기
 
 PostgreSQL은 기존 `dev-postgres-vm`의 Cibo 전용 DB를 사용한다. 로컬 PC에서는 웹·API를 실행하고 SeaweedFS만 Docker로 띄울 수 있다. 저장소 루트의 `.env`를 준비하고, `DATABASE_URL`에는 VPN 등으로 접근할 수 있는 DB의 실제 사설 DNS 이름과 전용 계정을 입력한다. OCI 콘솔의 VM 표시 이름은 DNS 이름과 다를 수 있다. 최초 DB·역할 생성과 TLS 설정은 아래 2절을 따른다.
