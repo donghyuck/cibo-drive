@@ -138,4 +138,4 @@ npx --package=node@24 --package=@modelcontextprotocol/inspector@2.17.0 mcp-inspe
 
 ## 데이터베이스 표준화 기준
 
-[공공데이터 표준 물리명 대조표](docs/database-names.md)에 8개 테이블과 37개 컬럼의 기존 이름, 적용 이름, 표준용어·단어 및 프로젝트 용어를 기록합니다. [SQL 마이그레이션](apps/api/migrations)은 기존 DB에서 데이터를 유지한 채 이름을 변경합니다. 스키마 변경 시 논리명·물리명, 자료형, 키, NULL의 의미, 코드 허용값을 함께 검토합니다. 기관 적용 시에는 [공공기관의 데이터베이스 표준화 지침](https://www.law.go.kr/LSW/admRulLsInfoP.do?admRulSeq=2100000255382)과 해당 기관 표준사전을 기준으로 도메인 및 코드 대응을 확인합니다.
+[공공데이터 표준 물리명 대조표](docs/database-names.md)에 8개 테이블과 39개 컬럼의 기존 이름, 적용 이름, 표준용어·단어 및 프로젝트 용어를 기록합니다. [SQL 마이그레이션](apps/api/migrations)은 기존 DB에서 데이터를 유지한 채 이름을 변경합니다. 스키마 변경 시 논리명·물리명, 자료형, 키, NULL의 의미, 코드 허용값을 함께 검토합니다. 기관 적용 시에는 [공공기관의 데이터베이스 표준화 지침](https://www.law.go.kr/LSW/admRulLsInfoP.do?admRulSeq=2100000255382)과 해당 기관 표준사전을 기준으로 도메인 및 코드 대응을 확인합니다.

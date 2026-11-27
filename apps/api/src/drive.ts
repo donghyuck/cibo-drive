@@ -204,6 +204,7 @@ export function driveRouter(settings: Settings) {
     parent: string,
     name: string,
     key: string | null,
+    size: number | null = null,
   ) {
     return transaction(db, async (client) => {
       const u = res.locals.user;
@@ -215,8 +216,8 @@ export function driveRouter(settings: Settings) {
       if (!live.rowCount)
         throw new HttpError(404, '대상 폴더를 찾을 수 없습니다.');
       const { rows } = await client.query(
-        'INSERT INTO doc_artcl(doc_space_idntfr,up_artcl_idntfr,artcl_nm,s3_objt_key,creatr_acnt_idntfr) VALUES ($1,$2,$3,$4,$5) RETURNING artcl_idntfr AS id',
-        [u.space_id, parent, name, key, u.id],
+        'INSERT INTO doc_artcl(doc_space_idntfr,up_artcl_idntfr,artcl_nm,s3_objt_key,creatr_acnt_idntfr,file_sz) VALUES ($1,$2,$3,$4,$5,$6) RETURNING artcl_idntfr AS id',
+        [u.space_id, parent, name, key, u.id, size],
       );
       if (key)
         await client.query(
@@ -256,7 +257,9 @@ export function driveRouter(settings: Settings) {
         new PutObjectCommand({ Bucket: bucket, Key: key, Body: req.body }),
       );
       try {
-        res.status(201).json(await insert(res, parent.id, name, key));
+        res
+          .status(201)
+          .json(await insert(res, parent.id, name, key, req.body.length));
       } catch (error) {
         // A lost COMMIT response may still represent a committed file.
         const referenced = await db.query(

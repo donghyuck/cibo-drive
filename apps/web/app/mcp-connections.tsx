@@ -33,62 +33,130 @@ export function McpConnections({ canIssue }: { canIssue: boolean }) {
     <section className="admin mcp-connections">
       <h1>MCP 연결</h1>
       <p>
-        Streamable HTTP 클라이언트에 아래 주소와 Bearer 토큰을 설정하세요.
-        연결된 클라이언트는 내 권한으로 파일을 찾고 읽을 수 있습니다.
+        MCP를 지원하는 앱에서 내 문서 공간을 검색하고 파일 본문과 출처를 읽을 수
+        있습니다.
       </p>
-      <label>
-        서버 주소
-        <input readOnly value={endpoint} />
-      </label>
-      {canIssue && (
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            void action(async () => {
-              const result = await post('mcp-tokens', { name: name.trim() });
-              setSecret(result.token);
-              setSecretId(result.id);
-              setName('');
-              await refresh();
-            });
-          }}
-        >
-          <label>
-            연결 이름
-            <input
-              maxLength={64}
-              required
-              value={name}
-              placeholder="예: MCP Inspector"
-              onChange={(e) => setName(e.target.value)}
-            />
-          </label>
-          <button className="primary" disabled={busy || !name.trim()}>
-            읽기 전용 토큰 발급
-          </button>
-        </form>
-      )}
-      {secret && (
-        <div>
-          <label>
-            발급된 토큰 · 이 화면에서 한 번만 확인할 수 있습니다
-            <input type="password" readOnly value={secret} autoComplete="off" />
-          </label>
-          <button
-            onClick={() =>
-              void action(async () => {
-                await navigator.clipboard.writeText(secret);
-                setMessage('토큰을 복사했습니다.');
-              })
-            }
-          >
-            토큰 복사
-          </button>
-          <button onClick={() => setSecret('')}>토큰 숨기기</button>
-        </div>
-      )}
+      <ol className="mcp-steps">
+        <li>
+          <h2>연결 이름을 정하고 토큰을 발급하세요</h2>
+          <p>
+            토큰은 앱에 읽기 권한을 주는 연결용 비밀번호입니다. 앱마다 구분하기
+            쉬운 이름을 쓰세요. 토큰은 30일간 유효합니다.
+          </p>
+          {!canIssue && (
+            <p>
+              발급하려면 활성 계정과 문서 공간 접근 권한이 필요합니다.
+              관리자에게 권한을 요청하세요.
+            </p>
+          )}
+          {canIssue && (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                void action(async () => {
+                  const result = await post('mcp-tokens', {
+                    name: name.trim(),
+                  });
+                  setSecret(result.token);
+                  setSecretId(result.id);
+                  setName('');
+                  await refresh();
+                });
+              }}
+            >
+              <label>
+                연결 이름
+                <input
+                  maxLength={64}
+                  required
+                  value={name}
+                  placeholder="예: MCP Inspector"
+                  onChange={(e) => setName(e.target.value)}
+                />
+              </label>
+              <button className="primary" disabled={busy || !name.trim()}>
+                읽기 전용 토큰 발급
+              </button>
+            </form>
+          )}
+          {secret && (
+            <div>
+              <label>
+                발급된 토큰 · 지금 복사하세요
+                <input
+                  type="password"
+                  readOnly
+                  value={secret}
+                  autoComplete="off"
+                />
+              </label>
+              <button
+                onClick={() =>
+                  void action(async () => {
+                    await navigator.clipboard.writeText(secret);
+                    setMessage('토큰을 복사했습니다.');
+                  })
+                }
+              >
+                토큰 복사
+              </button>
+              <button onClick={() => setSecret('')}>토큰 숨기기</button>
+              <p>
+                이 화면을 닫으면 토큰을 다시 복사할 수 없습니다. 분실하면
+                아래에서 연결을 해제하고 새 토큰을 발급하세요.
+              </p>
+            </div>
+          )}
+        </li>
+        <li>
+          <h2>사용할 앱에서 MCP 서버를 추가하세요</h2>
+          <p>
+            앱의 MCP 설정에서 연결 방식은 <strong>Streamable HTTP</strong>를
+            선택하고 아래 서버 주소를 붙여 넣으세요.
+          </p>
+          <div className="mcp-endpoint">
+            <label>
+              서버 주소
+              <input readOnly value={endpoint} />
+            </label>
+            <button
+              disabled={!endpoint || busy}
+              onClick={() =>
+                void action(async () => {
+                  await navigator.clipboard.writeText(endpoint);
+                  setMessage('서버 주소를 복사했습니다.');
+                })
+              }
+            >
+              주소 복사
+            </button>
+          </div>
+          <p>
+            인증 방식은 <strong>Bearer Token</strong>을 선택하고 복사한 토큰
+            값만 입력하세요.
+          </p>
+          <details>
+            <summary>앱에 HTTP 헤더 입력란만 있나요?</summary>
+            <p>
+              헤더 이름에 <code>Authorization</code>, 값에 <code>Bearer</code>와
+              공백 한 칸, 발급받은 토큰을 차례로 입력하세요.
+            </p>
+          </details>
+        </li>
+        <li>
+          <h2>폴더 목록으로 연결을 확인하세요</h2>
+          <p>
+            앱에서 연결한 뒤 <code>list_folder</code>를 인자 없이 실행하세요. 팀
+            문서 공간의 폴더와 파일 목록이 표시되면 연결된 것입니다.
+          </p>
+        </li>
+      </ol>
       {message && <p role="status">{message}</p>}
       <h2>내 연결</h2>
+      <p>
+        사용을 마친 앱은 연결을 해제하세요. 해당 토큰은 즉시 사용할 수 없게
+        됩니다.
+      </p>
       {connections.length === 0 ? (
         <p>발급된 연결이 없습니다.</p>
       ) : (

@@ -34,6 +34,8 @@
 | 컬럼 | `changes.action` | `chg_hstry.job_type_cd` | 표준단어 조합 · 작업 + 유형 + 코드 |
 | 컬럼 | `changes.target` | `chg_hstry.trgt_idntfr` | 표준단어 조합 · 대상 + 식별자 |
 | 컬럼 | `changes.recorded_at` | `chg_hstry.rcd_dt` | 등록 용어 기록일시 · RCD_DT · 연월일시분초D |
+| 신규 컬럼 | — | `doc_artcl.file_sz` | 등록 용어 파일크기 · FILE_SZ · 바이트 |
+| 신규 컬럼 | — | `doc_artcl.reg_dt` | 등록 용어 등록일시 · REG_DT |
 | 신규 테이블 | — | `mcp_acs_tkn` | 사용자별 문서 공간 MCP 접근 토큰 |
 | 신규 컬럼 | — | `mcp_acs_tkn.tkn_idntfr` | 토큰 관리 식별자 |
 | 신규 컬럼 | — | `mcp_acs_tkn.acnt_idntfr` | 계정 식별자 |

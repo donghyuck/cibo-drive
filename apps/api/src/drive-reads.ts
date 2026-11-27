@@ -8,7 +8,7 @@ export const tree = `WITH RECURSIVE tree AS (
  JOIN doc_artcl a ON a.up_artcl_idntfr=t.artcl_idntfr WHERE a.doc_space_idntfr=$1 AND a.del_grp_idntfr IS NULL
 )`;
 const fields =
-  'artcl_idntfr AS id, artcl_nm AS name, s3_objt_key IS NULL AS folder';
+  'artcl_idntfr AS id, artcl_nm AS name, s3_objt_key IS NULL AS folder,file_sz::float8 AS size,reg_dt AS registered_at';
 
 export async function folder(db: pg.Pool, id: unknown, space: number) {
   const { rows } = await db.query(

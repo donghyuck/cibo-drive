@@ -1,3 +1,4 @@
+import { fillMissingFileSizes } from './file-sizes.js';
 import pg from 'pg';
 import { startExtraction } from './document-text.js';
 import type { Readable } from 'node:stream';
@@ -35,6 +36,9 @@ if (process.env.DATABASE_URL) {
       secretAccessKey: env.S3_SECRET_ACCESS_KEY,
     },
   });
+  void fillMissingFileSizes(db, s3, env.S3_BUCKET).catch(() =>
+    console.warn('File size backfill unavailable'),
+  );
   startExtraction(db, async (key) => {
     const response = await s3.send(
       new GetObjectCommand({ Bucket: env.S3_BUCKET, Key: key }),

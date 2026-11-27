@@ -21,10 +21,29 @@ import { EntryTools, SpaceLookup, type DriveItem } from './entry-tools';
 import { FilePreview } from './file-preview';
 import { api, post } from './drive-api';
 
+const maxFileMiB = 10;
+const uploadHint = `파일당 최대 ${maxFileMiB} MiB · PDF, DOCX, TXT, MD`;
+
 export type Folder = {
   current: { id: string; name: string; parent_id: string | null };
-  entries: { id: string; name: string; folder: boolean }[];
+  entries: {
+    id: string;
+    name: string;
+    folder: boolean;
+    size: number | null;
+    registered_at: string | null;
+  }[];
 };
+function fileSize(bytes: number | null) {
+  if (bytes == null) return '—';
+  if (bytes < 1024) return bytes + ' B';
+  return bytes < 1024 ** 2
+    ? (bytes / 1024).toLocaleString('ko-KR', { maximumFractionDigits: 1 }) +
+        ' KiB'
+    : (bytes / 1024 ** 2).toLocaleString('ko-KR', {
+        maximumFractionDigits: 2,
+      }) + ' MiB';
+}
 function fileType(entry: Folder['entries'][number]) {
   if (entry.folder) return '폴더';
   return entry.name.split('.').pop()?.toUpperCase() || '파일';
@@ -39,7 +58,7 @@ export function FileBrowser({
 }) {
   const [folder, setFolder] = useState(initial);
   const [trail, setTrail] = useState([initial.current]);
-  const [preview, setPreview] = useState<Folder['entries'][number] | null>(
+  const [preview, setPreview] = useState<Pick<DriveItem, 'id' | 'name'> | null>(
     null,
   );
   const [lookup, setLookup] = useState<'search' | 'trash' | null>(null);
@@ -104,6 +123,10 @@ export function FileBrowser({
       let count = 0;
       try {
         for (const file of files) {
+          if (file.size > maxFileMiB * 1024 * 1024)
+            throw new Error(
+              `${file.name} · 파일당 최대 ${maxFileMiB} MiB까지 업로드할 수 있습니다.`,
+            );
           setNotice(file.name + ' 업로드 중…');
           try {
             await api(
@@ -228,37 +251,42 @@ export function FileBrowser({
               </p>
             </div>
             {writable && (
-              <div className="actions">
-                <button
-                  disabled={busy}
-                  onClick={() => {
-                    setName('');
-                    setError('');
-                    dialog.current?.showModal();
-                  }}
-                >
-                  <FolderPlus />새 폴더
-                </button>
-                <button
-                  className="primary"
-                  disabled={busy}
-                  onClick={() => picker.current?.click()}
-                >
-                  <Upload />
-                  파일 업로드
-                </button>
-                <input
-                  hidden
-                  ref={picker}
-                  type="file"
-                  multiple
-                  accept=".pdf,.docx,.txt,.md"
-                  aria-label="업로드할 파일"
-                  onChange={(e) => {
-                    upload(Array.from(e.target.files ?? []));
-                    e.target.value = '';
-                  }}
-                />
+              <div>
+                <div className="actions">
+                  <button
+                    disabled={busy}
+                    onClick={() => {
+                      setName('');
+                      setError('');
+                      dialog.current?.showModal();
+                    }}
+                  >
+                    <FolderPlus />새 폴더
+                  </button>
+                  <button
+                    className="primary"
+                    aria-describedby="upload-hint"
+                    disabled={busy}
+                    onClick={() => picker.current?.click()}
+                  >
+                    <Upload />
+                    파일 업로드
+                  </button>
+                  <input
+                    hidden
+                    ref={picker}
+                    type="file"
+                    multiple
+                    accept=".pdf,.docx,.txt,.md"
+                    aria-label="업로드할 파일"
+                    aria-describedby="upload-hint"
+                    onChange={(e) => {
+                      upload(Array.from(e.target.files ?? []));
+                      e.target.value = '';
+                    }}
+                  />
+                </div>
+                <small id="upload-hint">{uploadHint}</small>
               </div>
             )}
           </div>
@@ -310,6 +338,8 @@ export function FileBrowser({
             <div className={'list-head' + (grid ? ' hide' : '')}>
               <span>이름</span>
               <span>유형</span>
+              <span>크기</span>
+              <span>등록일</span>
               <span />
             </div>
             <ul className={grid ? 'items grid' : 'items'}>
@@ -343,6 +373,35 @@ export function FileBrowser({
                     </span>
                     <span className="filename">{item.name}</span>
                     <span className="kind">{type}</span>
+                    <span className="entry-meta">
+                      <span
+                        aria-label="크기"
+                        title={
+                          item.size == null
+                            ? undefined
+                            : item.size.toLocaleString() + ' 바이트'
+                        }
+                      >
+                        {fileSize(item.size)}
+                      </span>
+                      <time
+                        aria-label="등록일"
+                        dateTime={item.registered_at ?? undefined}
+                        title={
+                          item.registered_at
+                            ? new Date(item.registered_at).toLocaleString(
+                                'ko-KR',
+                              )
+                            : undefined
+                        }
+                      >
+                        {item.registered_at
+                          ? new Date(item.registered_at).toLocaleDateString(
+                              'ko-KR',
+                            )
+                          : '—'}
+                      </time>
+                    </span>
                     <span className="row-action">
                       {item.folder ? <ChevronRight /> : <Eye />}
                     </span>
@@ -462,6 +521,7 @@ export function FileBrowser({
         <div className="drop">
           <Upload />
           <strong>이 폴더에 파일 업로드</strong>
+          <small>{uploadHint}</small>
         </div>
       )}
       {writable && (

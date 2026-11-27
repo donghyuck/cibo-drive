@@ -266,10 +266,18 @@ test('team approval, space access and original file lifecycle', async (t) => {
     { unit: 'line', start: 1, end: 1, text: '첫 문서' },
   ]);
   assert.equal((await upload('회의록.md', '다른 내용')).status, 409);
-  assert.deepEqual(
-    (await (await request('folder?id=' + child, member)).json()).entries,
-    [{ id, name: '회의록.md', folder: false }],
-  );
+  const entries = (await (await request('folder?id=' + child, member)).json())
+    .entries;
+  assert.equal(entries.length, 1);
+  const registered = entries[0].registered_at;
+  assert.ok(Number.isFinite(Date.parse(registered)));
+  assert.deepEqual(entries[0], {
+    id,
+    name: '회의록.md',
+    folder: false,
+    size: Buffer.byteLength(data),
+    registered_at: registered,
+  });
   const key = (
     await db.query(
       'SELECT s3_objt_key AS object_key FROM doc_artcl WHERE artcl_idntfr=$1',
@@ -361,6 +369,11 @@ test('team approval, space access and original file lifecycle', async (t) => {
   assert.equal((await search('report_100%'))[0].id, id);
   assert.equal((await change(id, 'move', { parent })).status, 204);
   assert.equal((await folderRows(child)).length, 0);
+  assert.equal(
+    (await folderRows(parent)).find((x: { id: string }) => x.id === id)
+      .registered_at,
+    registered,
+  );
   assert.ok(
     (await folderRows(parent)).some((x: { id: string }) => x.id === id),
   );
