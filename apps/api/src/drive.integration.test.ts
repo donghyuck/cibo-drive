@@ -1,3 +1,5 @@
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import assert from 'node:assert/strict';
 import { extractNext } from './document-text.js';
 import { Readable } from 'node:stream';
@@ -137,6 +139,10 @@ test('team approval, space access and original file lifecycle', async (t) => {
     (await post('login', '', { credential: 'invalid' })).status,
     401,
   );
+  assert.equal(
+    (await post('mcp-tokens', member, { name: 'pending' })).status,
+    403,
+  );
   const grant = async (status: string, role: string, access: boolean) =>
     assert.equal(
       (await post('admin/accounts/' + me.id, master, { status, role, access }))
@@ -144,6 +150,63 @@ test('team approval, space access and original file lifecycle', async (t) => {
       204,
     );
   await grant('active', 'editor', true);
+  const issue = await post('mcp-tokens', member, {
+    name: 'Integration client',
+  });
+  assert.equal(issue.status, 201);
+  const issued = await issue.json();
+  const mcpEndpoint = new URL('mcp', base);
+  const headers = { Authorization: 'Bearer ' + issued.token };
+  const mcpStatus = async (extra: Record<string, string> = {}) =>
+    (
+      await fetch(mcpEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...extra },
+        body: '{}',
+      })
+    ).status;
+  assert.equal(await mcpStatus(), 401);
+  assert.equal(await mcpStatus({ cookie: member }), 401);
+  assert.equal(
+    await mcpStatus({
+      Authorization:
+        'Bearer eyJhbGciOiJSUzI1NiJ9.eyJpc3MiOiJhY2NvdW50cy5nb29nbGUuY29tIn0.signature',
+    }),
+    401,
+  );
+  assert.equal(
+    await mcpStatus({ ...headers, origin: 'https://elsewhere.example' }),
+    403,
+  );
+  assert.equal((await request('me', '', { headers })).status, 401);
+  assert.equal(
+    (await request('mcp-tokens/' + issued.id, master, { method: 'DELETE' }))
+      .status,
+    404,
+  );
+  const listed = await (await request('mcp-tokens', member)).json();
+  assert.equal(listed[0].id, issued.id);
+  assert.ok(!JSON.stringify(listed).includes(issued.token));
+  const client = new Client({ name: 'drive-mcp-test', version: '1' });
+  await client.connect(
+    new StreamableHTTPClientTransport(mcpEndpoint, {
+      requestInit: { headers },
+    }),
+  );
+  t.after(() => client.close());
+  assert.deepEqual((await client.listTools()).tools.map((t) => t.name).sort(), [
+    'get_file_metadata',
+    'list_folder',
+    'read_file_text',
+    'search_files',
+  ]);
+  const call = (name: string, args: Record<string, unknown> = {}) =>
+    client.callTool({ name, arguments: args });
+  const readTool = async (name: string, args: Record<string, unknown> = {}) => {
+    const result = await call(name, args);
+    assert.ok(!result.isError);
+    return JSON.parse((result.content as { text: string }[])[0].text);
+  };
   const root = (await (await request('folder', member)).json()).current.id;
   const parent = (
     await (await post('folders', member, { parent: root, name: '팀' })).json()
@@ -213,6 +276,19 @@ test('team approval, space access and original file lifecycle', async (t) => {
       [id],
     )
   ).rows[0].object_key;
+  assert.equal((await readTool('list_folder')).folder.id, root);
+  assert.equal(
+    (await readTool('list_folder', { folderId: child })).entries[0].id,
+    id,
+  );
+  assert.equal(
+    (await readTool('get_file_metadata', { fileId: id })).size,
+    Buffer.byteLength(data),
+  );
+  assert.deepEqual(
+    (await readTool('read_file_text', { fileId: id })).segments,
+    firstText.segments,
+  );
   const anonymous = await fetch(
     env.S3_ENDPOINT + '/' + env.S3_BUCKET + '/' + key,
   );
@@ -289,9 +365,28 @@ test('team approval, space access and original file lifecycle', async (t) => {
     (await folderRows(parent)).some((x: { id: string }) => x.id === id),
   );
   assert.deepEqual((await search('100%'))[0].location, ['팀 문서 공간', '팀']);
+  assert.deepEqual(
+    (await readTool('search_files', { query: '회의록' })).entries,
+    [],
+  );
+  const moved = (
+    await readTool('search_files', { query: 'report', folderId: parent })
+  ).entries[0];
+  assert.equal(moved.id, id);
+  assert.deepEqual(moved.location, ['팀 문서 공간', '팀']);
+  assert.equal(
+    (await readTool('get_file_metadata', { fileId: id })).name,
+    'Report_100%.md',
+  );
   assert.equal((await change(child, 'trash')).status, 204);
   assert.equal((await change(parent, 'trash')).status, 204);
   assert.equal((await request(textUrl, member)).status, 404);
+  for (const name of ['get_file_metadata', 'read_file_text'])
+    assert.equal((await call(name, { fileId: id })).isError, true);
+  assert.deepEqual(
+    (await readTool('search_files', { query: 'report' })).entries,
+    [],
+  );
   assert.deepEqual(await search('Report'), []);
   assert.deepEqual(await folderRows(root), []);
   assert.equal((await request(download, member)).status, 404);
@@ -366,6 +461,7 @@ test('team approval, space access and original file lifecycle', async (t) => {
     'Report_100%.md',
   );
   await grant('active', 'editor', false);
+  assert.equal(await mcpStatus(headers), 403);
   assert.equal((await request(textUrl, member)).status, 403);
   assert.equal(
     (await request(preview, member, { headers: { Range: 'bytes=0-2' } }))
@@ -375,6 +471,18 @@ test('team approval, space access and original file lifecycle', async (t) => {
   assert.equal((await request(preview, '')).status, 401);
   assert.equal((await request(download, member)).status, 403);
   await grant('suspended', 'editor', true);
+  assert.equal(await mcpStatus(headers), 403);
+  await db.query(
+    "UPDATE mcp_acs_tkn SET expry_dt=now()-interval '1 second' WHERE tkn_idntfr=$1",
+    [issued.id],
+  );
+  assert.equal(await mcpStatus(headers), 401);
+  assert.equal(
+    (await request('mcp-tokens/' + issued.id, member, { method: 'DELETE' }))
+      .status,
+    204,
+  );
+  assert.equal(await mcpStatus(headers), 401);
   assert.equal((await request(download, member)).status, 403);
   assert.equal(
     (

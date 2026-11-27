@@ -1226,3 +1226,29 @@ dialog.lookup {
   align-items: center;
   justify-content: space-between;
 }
+.mcp-connections {
+  max-width: 860px;
+}
+.mcp-connections p,
+.mcp-connections h2 {
+  margin-block: 1rem;
+}
+.mcp-connections label,
+.mcp-row small {
+  display: block;
+}
+.mcp-connections input {
+  display: block;
+  padding: 8px;
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.mcp-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--line);
+  padding: 10px 0;
+}

@@ -1,4 +1,6 @@
 import { HttpError, nameOf, transaction, lockSpace } from './drive-db.js';
+import { listFolder, folder, readText } from './drive-reads.js';
+import { mcpEndpoint, tokenRoutes } from './user-mcp.js';
 import { entryRoutes } from './entry-routes.js';
 import express, { type Request, type Response } from 'express';
 import pg from 'pg';
@@ -58,6 +60,7 @@ function hash(token: string) {
 export function driveRouter(settings: Settings) {
   const { db, origin, masterSubject, clientId, s3, bucket } = settings;
   const router = express.Router();
+  router.use('/mcp', mcpEndpoint(settings));
   const cookie = {
     httpOnly: true,
     secure: origin.startsWith('https:'),
@@ -122,6 +125,7 @@ export function driveRouter(settings: Settings) {
     res.locals.user = rows[0];
     next();
   });
+  router.use('/mcp-tokens', tokenRoutes(db));
   router.get('/me', (_req, res) => res.json(res.locals.user));
   router.use('/admin', (req, res, next) => {
     const u = res.locals.user;
@@ -192,22 +196,8 @@ export function driveRouter(settings: Settings) {
     next();
   });
   router.use(entryRoutes(db));
-  async function folder(id: unknown, space: number) {
-    const { rows } = await db.query(
-      `SELECT artcl_idntfr AS id,artcl_nm AS name,up_artcl_idntfr AS parent_id FROM doc_artcl WHERE doc_space_idntfr=$1 AND del_grp_idntfr IS NULL AND s3_objt_key IS NULL
-      AND (CASE WHEN $2::uuid IS NULL THEN up_artcl_idntfr IS NULL ELSE artcl_idntfr=$2 END)`,
-      [space, id ?? null],
-    );
-    if (!rows.length) throw new HttpError(404, '폴더를 찾을 수 없습니다.');
-    return rows[0];
-  }
   router.get('/folder', async (req, res) => {
-    const current = await folder(req.query.id, res.locals.user.space_id);
-    const { rows } = await db.query(
-      'SELECT artcl_idntfr AS id,artcl_nm AS name,s3_objt_key IS NULL AS folder FROM doc_artcl WHERE up_artcl_idntfr=$1 AND del_grp_idntfr IS NULL ORDER BY folder DESC,artcl_nm',
-      [current.id],
-    );
-    res.json({ current, entries: rows });
+    res.json(await listFolder(db, res.locals.user.space_id, req.query.id));
   });
   async function insert(
     res: Response,
@@ -242,7 +232,7 @@ export function driveRouter(settings: Settings) {
   }
   router.post('/folders', async (req, res) => {
     const name = nameOf(req.body?.name);
-    const parent = await folder(req.body?.parent, res.locals.user.space_id);
+    const parent = await folder(db, req.body?.parent, res.locals.user.space_id);
     res.status(201).json(await insert(res, parent.id, name, null));
   });
   router.post(
@@ -256,7 +246,11 @@ export function driveRouter(settings: Settings) {
         throw new HttpError(400, '지원하지 않는 확장자입니다.');
       if (!Buffer.isBuffer(req.body))
         throw new HttpError(400, '원본 파일이 필요합니다.');
-      const parent = await folder(req.query.parent, res.locals.user.space_id);
+      const parent = await folder(
+        db,
+        req.query.parent,
+        res.locals.user.space_id,
+      );
       const key = randomUUID();
       await s3.send(
         new PutObjectCommand({ Bucket: bucket, Key: key, Body: req.body }),
@@ -304,25 +298,13 @@ export function driveRouter(settings: Settings) {
     const offset = Number(req.query.offset ?? 0);
     if (!Number.isSafeInteger(offset) || offset < 0 || offset > 8192)
       throw new HttpError(400, '출처 위치를 확인하세요.');
-    const {
-      rows: [row],
-    } = await db.query(
-      `SELECT a.artcl_nm AS name,t.prcs_stts_cd AS status,t.fail_rsn AS reason,
-      jsonb_array_length(t.src_sctn_list) AS total,
-      ARRAY(SELECT t.src_sctn_list->i FROM generate_series($3::int,least($3::int+9,jsonb_array_length(t.src_sctn_list)-1)) i ORDER BY i) AS segments
-      FROM doc_artcl a JOIN doc_artcl_txt t USING(artcl_idntfr) WHERE a.artcl_idntfr=$1
-      AND a.doc_space_idntfr=$2 AND a.del_grp_idntfr IS NULL`,
-      [req.params.id, res.locals.user.space_id, offset],
+    const page = await readText(
+      db,
+      res.locals.user.space_id,
+      req.params.id,
+      offset,
     );
-    if (!row) throw new HttpError(404, '파일을 찾을 수 없습니다.');
-    res
-      .status(row.status === 'processing' ? 202 : 200)
-      .json({
-        ...row,
-        fileId: req.params.id,
-        offset,
-        nextOffset: offset + 10 < row.total ? offset + 10 : null,
-      });
+    res.status(page.status === 'processing' ? 202 : 200).json(page);
   });
   router.post('/files/:id/text/retry', async (req, res) => {
     await findFile(req.params.id, res.locals.user.space_id);

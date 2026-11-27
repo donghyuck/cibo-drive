@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   Files,
+  Plug,
   Layers3,
   LogOut,
   Menu,
@@ -12,10 +13,11 @@ import {
 
 type SidebarProps = {
   user: { email: string; role: 'admin' | 'editor' | 'viewer' } | null;
-  view: 'files' | 'accounts';
+  view: 'files' | 'accounts' | 'mcp';
   canManage: boolean;
   onFiles: () => void;
   onManage: () => void;
+  onMcp: () => void;
   onLogout: () => void;
 };
 function Brand() {
@@ -34,6 +36,7 @@ export function Sidebar({
   canManage,
   onFiles,
   onManage,
+  onMcp,
   onLogout,
 }: SidebarProps) {
   const [compact, setCompact] = useState(false);
@@ -71,6 +74,15 @@ export function Sidebar({
       >
         <Files />
         <span>팀 문서 공간</span>
+      </button>
+      <button
+        title="MCP 연결"
+        aria-label="MCP 연결"
+        aria-current={view === 'mcp' ? 'page' : undefined}
+        onClick={() => select(onMcp)}
+      >
+        <Plug />
+        <span>MCP 연결</span>
       </button>
       {canManage && (
         <button
