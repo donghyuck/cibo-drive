@@ -1,0 +1,17 @@
+**
+!package.json
+!package-lock.json
+!apps/
+!apps/api/
+!apps/web/
+!apps/*/package.json
+!apps/*/tsconfig.json
+!apps/api/src/
+!apps/api/src/**
+!apps/api/migrations/
+!apps/api/migrations/**
+!apps/web/app/
+!apps/web/app/**
+!apps/web/next.config.ts
+!deploy/
+!deploy/Caddyfile

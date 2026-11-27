@@ -13,3 +13,7 @@ h1 { margin: 0 0 .75rem; }
 .empty { margin-top: 1rem; padding: clamp(1.5rem, 5vw, 4rem); text-align: center; background: white; border: 1px solid #dce2ed; border-radius: 1rem; }
 .empty p { color: #52617b; }
 @media (max-width: 640px) { .shell { grid-template-columns: 1fr; } aside { border-right: 0; border-bottom: 1px solid #dce2ed; padding: 1rem 1.25rem; } }
+form { display:flex; flex-wrap:wrap; align-items:center; gap:.75rem; margin:1rem 0; padding:1rem; background:white; border:1px solid #dce2ed; border-radius:.5rem; }
+button, input, select { font:inherit; }
+button { cursor:pointer; }
+[role=alert] { color:#942d22; }

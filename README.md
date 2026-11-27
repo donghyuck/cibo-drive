@@ -11,6 +11,8 @@
 
 팀이 파일을 보관하고, 사람은 웹에서, AI 에이전트는 MCP에서 **같은 저장소의 파일을 권한에 맞게 찾고 열 수 있도록** 하는 서비스입니다. Studio API와 별도 저장소에서 개발합니다.
 
+기존 PostgreSQL과 1코어·1GB 앱 서버를 사용하는 경우 [OCI 배포 및 설치 가이드](deploy/README.md)를 참고합니다.
+
 ## 로컬에서 시작하기
 
 필수: Node.js 24, npm. PostgreSQL과 S3 호환 저장소 연결을 확인하려면 Docker Compose가 필요합니다.
@@ -31,7 +33,14 @@ npm run infra:check
 npm run typecheck && npm test && npm run build
 ```
 
-현재는 초기 GUI, API 상태 확인, 로컬 MCP 연결 및 개발용 저장소 구성이 있습니다. **Google 로그인·관리자 승인·파일 업로드 및 접근 권한은 아직 구현하지 않았습니다.** Docker의 계정과 포트는 로컬 개발 전용입니다.
+### 팀 문서 공간 실행
+위 Docker 서비스를 시작한 뒤 루트 `.env`에 다음 값을 설정하고 `npm run dev`를 실행합니다. API는 시작할 때 PostgreSQL 스키마와 기본 문서 공간을 초기화합니다. Docker 계정과 포트는 로컬 개발용입니다.
+
+- `GOOGLE_CLIENT_ID`에는 Google 웹 애플리케이션 OAuth 클라이언트 ID를 입력합니다. 해당 클라이언트의 승인된 JavaScript 원본에 웹 주소를 등록하고, `CIBO_WEB_ORIGIN`도 같은 값으로 설정합니다. 기본값은 `http://127.0.0.1:3000`입니다.
+- `CIBO_MASTER_GOOGLE_SUB`에는 최초 관리자의 검증된 Google 계정 식별자(`sub`)를 입력합니다. 식별자를 모르면 이 값을 비운 채 지정할 계정으로 먼저 로그인합니다. 운영자는 DB에서 승인 대기 계정의 `oidc_issuer`가 `https://accounts.google.com`이고 검증된 이메일이 대상 계정과 일치하는지 확인한 뒤 `oidc_subject`를 설정합니다. API를 재시작하고 같은 계정으로 다시 로그인하면 기존 계정이 활성 관리자가 됩니다. 공간 접근은 관리 화면에서 별도로 부여합니다.
+- 팀원이 처음 로그인하면 관리자는 **계정 관리**에서 해당 계정을 활성화하고 편집 또는 조회 역할과 공간 접근을 저장합니다. 팀원은 새로고침 후 폴더를 엽니다.
+- 편집자는 폴더를 생성하고 PDF·DOCX·TXT·MD 원본을 파일당 10 MiB까지 업로드할 수 있습니다. 파일명을 누르면 현재 공간 권한을 확인한 후 원본을 다운로드합니다.
+- `npm run test:drive`는 테스트 전용 PostgreSQL 스키마와 임시 S3 객체로 승인·권한·원본 저장을 검사합니다. 로그인 검증기는 테스트 대역을 사용합니다. 실제 Google 로그인은 등록한 웹 원본에서 확인합니다.
 
 ## 1차 목표: 팀 파일 저장소와 MCP 연결
 
@@ -95,3 +104,7 @@ AI 에이전트 ─→ MCP 서버 ──┘
 - [Google OpenID Connect](https://developers.google.com/identity/openid-connect/openid-connect)
 - [MCP 인증과 권한 부여](https://modelcontextprotocol.io/specification/latest/basic/authorization)
 
+
+## 데이터베이스 표준화 기준
+
+[공공데이터 표준 물리명 대조표](docs/database-names.md)에 6개 테이블과 24개 컬럼의 기존 이름, 적용 이름, 표준용어·단어 및 프로젝트 용어를 기록합니다. [SQL 마이그레이션](apps/api/migrations)은 기존 DB에서 데이터를 유지한 채 이름을 변경합니다. 스키마 변경 시 논리명·물리명, 자료형, 키, NULL의 의미, 코드 허용값을 함께 검토합니다. 기관 적용 시에는 [공공기관의 데이터베이스 표준화 지침](https://www.law.go.kr/LSW/admRulLsInfoP.do?admRulSeq=2100000255382)과 해당 기관 표준사전을 기준으로 도메인 및 코드 대응을 확인합니다.

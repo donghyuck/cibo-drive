@@ -8,7 +8,7 @@ if (!DATABASE_URL || !S3_ENDPOINT || !S3_BUCKET || !S3_ACCESS_KEY_ID || !S3_SECR
 
 const db = new pg.Pool({ connectionString: DATABASE_URL, connectionTimeoutMillis: 5000 });
 const s3 = new S3Client({
-  endpoint: S3_ENDPOINT, forcePathStyle: true, region: 'us-east-1', maxAttempts: 1,
+  endpoint: S3_ENDPOINT, forcePathStyle: true, region: process.env.S3_REGION ?? 'us-east-1', maxAttempts: 1,
   credentials: { accessKeyId: S3_ACCESS_KEY_ID, secretAccessKey: S3_SECRET_ACCESS_KEY },
 });
 try {
