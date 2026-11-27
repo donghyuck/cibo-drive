@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   Eye,
+  Ellipsis,
+  Trash2,
   ArrowDownAZ,
   ArrowUpZA,
   ChevronRight,
@@ -15,6 +17,7 @@ import {
   Upload,
   X,
 } from 'lucide-react';
+import { EntryTools, SpaceLookup, type DriveItem } from './entry-tools';
 import { FilePreview } from './file-preview';
 import { api, post } from './drive-api';
 
@@ -39,6 +42,9 @@ export function FileBrowser({
   const [preview, setPreview] = useState<Folder['entries'][number] | null>(
     null,
   );
+  const [lookup, setLookup] = useState<'search' | 'trash' | null>(null);
+  const [managed, setManaged] = useState<DriveItem | null>(null);
+  const [revision, setRevision] = useState(0);
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState('전체');
   const [descending, setDescending] = useState(false);
@@ -170,6 +176,18 @@ export function FileBrowser({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
+        </div>
+        <div className="space-tools">
+          <button onClick={() => setLookup('search')}>
+            <Search />
+            전체 공간 검색
+          </button>
+          {writable && (
+            <button onClick={() => setLookup('trash')}>
+              <Trash2 />
+              휴지통
+            </button>
+          )}
         </div>
       </header>
       <div className="content">
@@ -331,7 +349,10 @@ export function FileBrowser({
                   </>
                 );
                 return (
-                  <li key={item.id}>
+                  <li
+                    key={item.id}
+                    className={writable ? 'manageable' : undefined}
+                  >
                     {item.folder ? (
                       <button disabled={busy} onClick={() => navigate(item.id)}>
                         {inside}
@@ -343,6 +364,18 @@ export function FileBrowser({
                       >
                         {inside}
                       </button>
+                    )}
+                    {writable && (
+                      <span className="item-menu">
+                        <button
+                          className="icon"
+                          aria-label={item.name + ' 관리'}
+                          title="항목 관리"
+                          onClick={() => setManaged(item)}
+                        >
+                          <Ellipsis />
+                        </button>
+                      </span>
                     )}
                   </li>
                 );
@@ -386,6 +419,37 @@ export function FileBrowser({
           </div>
         )}
       </div>
+      {lookup && (
+        <SpaceLookup
+          mode={lookup}
+          writable={writable}
+          close={() => setLookup(null)}
+          refreshKey={revision}
+          manage={setManaged}
+          preview={setPreview}
+        />
+      )}
+      {managed && (
+        <EntryTools
+          item={managed}
+          restore={lookup === 'trash'}
+          close={() => setManaged(null)}
+          changed={() => {
+            setManaged(null);
+            setRevision((n) => n + 1);
+            void perform(async () => {
+              try {
+                setFolder(await read(current.id));
+              } catch (e) {
+                if ((e as { status?: number }).status !== 404) throw e;
+                const root = await read(initial.current.id);
+                setFolder(root);
+                setTrail([root.current]);
+              }
+            });
+          }}
+        />
+      )}
       {preview && (
         <FilePreview
           key={preview.id}

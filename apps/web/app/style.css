@@ -1090,3 +1090,95 @@ dialog.preview.expanded {
   border: 0;
   border-radius: 0;
 }
+.topbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.topbar .search {
+  flex: 1 1 210px;
+}
+.space-tools,
+.entry-actions {
+  display: flex;
+  gap: 6px;
+}
+.space-tools button,
+.entry-actions button {
+  font-size: 13px;
+}
+.items .manageable {
+  position: relative;
+}
+.manageable .row-action {
+  visibility: hidden;
+}
+.item-menu {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+.grid .item-menu {
+  top: auto;
+  bottom: 8px;
+  transform: none;
+}
+.item-menu button {
+  min-width: 32px;
+  background: transparent;
+}
+.item-menu button:hover {
+  background: #dceae2;
+}
+dialog.lookup {
+  width: min(620px, 94vw);
+  max-height: 80dvh;
+  overflow: auto;
+}
+.lookup ul {
+  padding: 0;
+  list-style: none;
+}
+.lookup li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--line);
+  padding: 10px 0;
+}
+.lookup li > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.lookup li > button {
+  flex: none;
+}
+.lookup small {
+  display: block;
+  color: var(--muted);
+}
+.lookup .result-name {
+  border: 0;
+  padding: 4px 0;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.entry-dialog .item-context {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+  margin: 9px 0 16px;
+}
+.entry-actions [aria-pressed='true'] {
+  background: #dcece0;
+}
+.entry-dialog select {
+  max-width: 100%;
+  padding: 9px;
+  font: inherit;
+}
+.entry-dialog footer {
+  margin-top: 18px;
+}

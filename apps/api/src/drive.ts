@@ -1,3 +1,5 @@
+import { HttpError, nameOf, transaction, lockSpace } from './drive-db.js';
+import { entryRoutes } from './entry-routes.js';
 import express, { type Request, type Response } from 'express';
 import pg from 'pg';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
@@ -40,14 +42,6 @@ export function googleVerifier(clientId: string) {
   };
 }
 
-class HttpError extends Error {
-  constructor(
-    readonly status: number,
-    message: string,
-  ) {
-    super(message);
-  }
-}
 const cookieName = 'cibo_session';
 function digest(req: Request) {
   const token =
@@ -61,35 +55,6 @@ function digest(req: Request) {
 function hash(token: string) {
   return createHash('sha256').update(token).digest('hex');
 }
-function nameOf(value: unknown) {
-  if (
-    typeof value !== 'string' ||
-    !value.trim() ||
-    value.length > 200 ||
-    /[\\/\x00-\x1f\x7f]/u.test(value) ||
-    ['.', '..'].includes(value.trim())
-  )
-    throw new HttpError(400, '이름을 확인하세요.');
-  return value.trim();
-}
-async function transaction<T>(
-  db: pg.Pool,
-  work: (client: pg.PoolClient) => Promise<T>,
-) {
-  const client = await db.connect();
-  try {
-    await client.query('BEGIN');
-    const value = await work(client);
-    await client.query('COMMIT');
-    return value;
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
-  }
-}
-
 export function driveRouter(settings: Settings) {
   const { db, origin, masterSubject, clientId, s3, bucket } = settings;
   const router = express.Router();
@@ -226,9 +191,10 @@ export function driveRouter(settings: Settings) {
       throw new HttpError(403, '문서 공간 권한이 필요합니다.');
     next();
   });
+  router.use(entryRoutes(db));
   async function folder(id: unknown, space: number) {
     const { rows } = await db.query(
-      `SELECT artcl_idntfr AS id,artcl_nm AS name,up_artcl_idntfr AS parent_id FROM doc_artcl WHERE doc_space_idntfr=$1 AND s3_objt_key IS NULL
+      `SELECT artcl_idntfr AS id,artcl_nm AS name,up_artcl_idntfr AS parent_id FROM doc_artcl WHERE doc_space_idntfr=$1 AND del_grp_idntfr IS NULL AND s3_objt_key IS NULL
       AND (CASE WHEN $2::uuid IS NULL THEN up_artcl_idntfr IS NULL ELSE artcl_idntfr=$2 END)`,
       [space, id ?? null],
     );
@@ -238,7 +204,7 @@ export function driveRouter(settings: Settings) {
   router.get('/folder', async (req, res) => {
     const current = await folder(req.query.id, res.locals.user.space_id);
     const { rows } = await db.query(
-      'SELECT artcl_idntfr AS id,artcl_nm AS name,s3_objt_key IS NULL AS folder FROM doc_artcl WHERE up_artcl_idntfr=$1 ORDER BY folder DESC,artcl_nm',
+      'SELECT artcl_idntfr AS id,artcl_nm AS name,s3_objt_key IS NULL AS folder FROM doc_artcl WHERE up_artcl_idntfr=$1 AND del_grp_idntfr IS NULL ORDER BY folder DESC,artcl_nm',
       [current.id],
     );
     res.json({ current, entries: rows });
@@ -251,6 +217,13 @@ export function driveRouter(settings: Settings) {
   ) {
     return transaction(db, async (client) => {
       const u = res.locals.user;
+      await lockSpace(client, u.space_id);
+      const live = await client.query(
+        'SELECT 1 FROM doc_artcl WHERE artcl_idntfr=$1 AND doc_space_idntfr=$2 AND s3_objt_key IS NULL AND del_grp_idntfr IS NULL',
+        [parent, u.space_id],
+      );
+      if (!live.rowCount)
+        throw new HttpError(404, '대상 폴더를 찾을 수 없습니다.');
       const { rows } = await client.query(
         'INSERT INTO doc_artcl(doc_space_idntfr,up_artcl_idntfr,artcl_nm,s3_objt_key,creatr_acnt_idntfr) VALUES ($1,$2,$3,$4,$5) RETURNING artcl_idntfr AS id',
         [u.space_id, parent, name, key, u.id],
@@ -300,7 +273,7 @@ export function driveRouter(settings: Settings) {
   const previews = new PreviewCache();
   async function findFile(id: string, space: number) {
     const { rows } = await db.query(
-      'SELECT s3_objt_key AS object_key,artcl_nm AS name FROM doc_artcl WHERE artcl_idntfr=$1 AND doc_space_idntfr=$2 AND s3_objt_key IS NOT NULL',
+      'SELECT s3_objt_key AS object_key,artcl_nm AS name FROM doc_artcl WHERE artcl_idntfr=$1 AND doc_space_idntfr=$2 AND del_grp_idntfr IS NULL AND s3_objt_key IS NOT NULL',
       [id, space],
     );
     if (!rows.length) throw new HttpError(404, '파일을 찾을 수 없습니다.');

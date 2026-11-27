@@ -239,6 +239,85 @@ test('team approval, space access and original file lifecycle', async (t) => {
   } finally {
     s3.middlewareStack.remove('countPreviewReads');
   }
+  const change = (target: string, action: string, body: object = {}) =>
+    post('entries/' + target + '/' + action, member, body);
+  const search = async (q: string) =>
+    (await request('search?' + new URLSearchParams({ q }), member)).json();
+  const folderRows = async (parentId: string) =>
+    (await (await request('folder?id=' + parentId, member)).json()).entries;
+  for (const action of ['rename', 'move', 'trash', 'restore'])
+    assert.equal((await change(id, action)).status, 403);
+  assert.equal((await request('trash', member)).status, 403);
+  await grant('active', 'editor', true);
+  assert.equal((await change(root, 'trash')).status, 400);
+  assert.equal((await change(parent, 'move', { parent: child })).status, 400);
+  assert.equal((await change(child, 'move', { parent: child })).status, 400);
+  assert.equal((await change(id, 'rename', { name: '파일.pdf' })).status, 400);
+  assert.equal(
+    (await change(id, 'rename', { name: 'Report_100%.md' })).status,
+    204,
+  );
+  assert.deepEqual(await search('회의록'), []);
+  assert.equal((await search('report_100%'))[0].id, id);
+  assert.equal((await change(id, 'move', { parent })).status, 204);
+  assert.equal((await folderRows(child)).length, 0);
+  assert.ok(
+    (await folderRows(parent)).some((x: { id: string }) => x.id === id),
+  );
+  assert.deepEqual((await search('100%'))[0].location, ['팀 문서 공간', '팀']);
+  assert.equal((await change(child, 'trash')).status, 204);
+  assert.equal((await change(parent, 'trash')).status, 204);
+  assert.deepEqual(await search('Report'), []);
+  assert.deepEqual(await folderRows(root), []);
+  assert.equal((await request(download, member)).status, 404);
+  assert.equal(
+    (await request(preview, member, { headers: { Range: 'bytes=0-2' } }))
+      .status,
+    404,
+  );
+  assert.equal(
+    (await post('folders', member, { parent, name: '숨은 폴더' })).status,
+    404,
+  );
+  assert.equal((await change(child, 'restore')).status, 409);
+  const trash = await (await request('trash', member)).json();
+  assert.deepEqual(
+    trash.map((x: { id: string }) => x.id).sort(),
+    [child, parent].sort(),
+  );
+  const replacement = await post('folders', member, {
+    parent: root,
+    name: '팀',
+  });
+  assert.equal(replacement.status, 201);
+  assert.equal((await change(parent, 'restore')).status, 409);
+  assert.equal(
+    (await change(parent, 'restore', { name: '복원된 팀' })).status,
+    204,
+  );
+  assert.equal((await request('folder?id=' + child, member)).status, 404);
+  assert.equal((await change(child, 'restore')).status, 204);
+  assert.deepEqual((await search('Report'))[0].location, [
+    '팀 문서 공간',
+    '복원된 팀',
+  ]);
+  assert.equal(await (await request(download, member)).text(), data);
+  assert.equal(await (await request(preview, member)).text(), data);
+  assert.equal(
+    (
+      await db.query(
+        'SELECT s3_objt_key FROM doc_artcl WHERE artcl_idntfr=$1',
+        [id],
+      )
+    ).rows[0].s3_objt_key,
+    key,
+  );
+  const sibling = (await replacement.json()).id;
+  const moves = await Promise.all([
+    change(sibling, 'move', { parent }),
+    change(parent, 'move', { parent: sibling }),
+  ]);
+  assert.deepEqual(moves.map((r) => r.status).sort(), [204, 400]);
   await grant('active', 'editor', false);
   assert.equal(
     (await request(preview, member, { headers: { Range: 'bytes=0-2' } }))
