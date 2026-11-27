@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowDownToLine, X } from 'lucide-react';
+import { ArrowDownToLine, Maximize2, Minimize2, X } from 'lucide-react';
 import dynamic from 'next/dynamic';
 
 const Markdown = dynamic(() => import('react-markdown'));
@@ -18,6 +18,8 @@ export function FilePreview({
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
+  const [expanded, setExpanded] = useState(false);
+  const resizeLabel = expanded ? '기본 크기로 복원' : '전체 화면으로 확대';
   const src = '/api/files/' + encodeURIComponent(file.id);
   const url = src + '/preview';
   const ext = file.name.split('.').pop()?.toLowerCase();
@@ -75,12 +77,13 @@ export function FilePreview({
   }, [ext, url]);
   return (
     <dialog
-      className="preview"
+      className={expanded ? 'preview expanded' : 'preview'}
       ref={dialog}
       aria-labelledby="preview-title"
       onCancel={(e) => {
         e.preventDefault();
-        close();
+        if (expanded) setExpanded(false);
+        else close();
       }}
       onClick={(e) => {
         if (e.target !== e.currentTarget) return;
@@ -107,6 +110,15 @@ export function FilePreview({
             <ArrowDownToLine size={17} />
             <span>다운로드</span>
           </a>
+          <button
+            className="icon"
+            type="button"
+            aria-label={resizeLabel}
+            title={resizeLabel}
+            onClick={() => setExpanded((value) => !value)}
+          >
+            {expanded ? <Minimize2 /> : <Maximize2 />}
+          </button>
           <button
             autoFocus
             className="icon"
