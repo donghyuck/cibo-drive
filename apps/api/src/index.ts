@@ -26,7 +26,7 @@ if (process.env.DATABASE_URL) {
     throw new Error('Configure S3 storage in .env');
   const s3 = new S3Client({
     endpoint: env.S3_ENDPOINT,
-    region: 'us-east-1',
+    region: process.env.S3_REGION ?? 'us-east-1',
     forcePathStyle: true,
     credentials: {
       accessKeyId: env.S3_ACCESS_KEY_ID,
