@@ -50,8 +50,9 @@ if (process.env.DATABASE_URL) {
     res.status(503).json({ error: '데이터베이스 설정이 필요합니다.' }),
   );
 }
-app.listen(port, '127.0.0.1', () => {
-  console.log(`Cibo API: http://127.0.0.1:${port}/healthz`);
+const host = enableLocalMcp ? '127.0.0.1' : (process.env.CIBO_API_HOST ?? '127.0.0.1');
+app.listen(port, host, () => {
+  console.log(`Cibo API: http://${host}:${port}/healthz`);
   if (enableLocalMcp)
     console.log(`MCP preview (no file access): http://127.0.0.1:${port}/mcp`);
 });

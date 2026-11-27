@@ -11,6 +11,8 @@
 
 팀이 파일을 보관하고, 사람은 웹에서, AI 에이전트는 MCP에서 **같은 저장소의 파일을 권한에 맞게 찾고 열 수 있도록** 하는 서비스입니다. Studio API와 별도 저장소에서 개발합니다.
 
+기존 PostgreSQL과 1코어·1GB 앱 서버를 사용하는 경우 [OCI 배포 및 설치 가이드](deploy/README.md)를 참고합니다.
+
 ## 로컬에서 시작하기
 
 필수: Node.js 24, npm. PostgreSQL과 S3 호환 저장소 연결을 확인하려면 Docker Compose가 필요합니다.

@@ -1,10 +1,12 @@
 import type { NextConfig } from 'next';
 
+const staticExport = process.env.CIBO_STATIC_EXPORT === 'true';
+
 const config: NextConfig = {
-  output: 'standalone',
+  output: staticExport ? 'export' : 'standalone',
   poweredByHeader: false,
   experimental: { proxyClientMaxBodySize: '12mb' },
-  async rewrites() {
+  rewrites: staticExport ? undefined : async () => {
     return [
       {
         source: '/api/:path*',
