@@ -2,6 +2,8 @@
 
 기존 PostgreSQL 서버에 전용 DB를 만들고, 유휴 Linux VM에서 Caddy, Cibo API, SeaweedFS를 실행한다. 브라우저는 HTTPS 한 주소를 사용한다. Caddy가 미리 빌드한 웹 파일을 제공하고 `/api/*`를 내부 API로 전달한다. API는 기존 DB에 메타데이터를, SeaweedFS의 비공개 버킷에 파일 원본을 저장한다.
 
+로컬에서 앱을 실행하고 유휴 서버에는 원본만 보관하려면 [SeaweedFS 단독 배포](storage/README.md)를 사용한다.
+
 ## 기존 DB를 사용해 로컬에서 먼저 운영하기
 
 PostgreSQL은 기존 `dev-postgres-vm`의 Cibo 전용 DB를 사용한다. 로컬 PC에서는 웹·API를 실행하고 SeaweedFS만 Docker로 띄울 수 있다. 저장소 루트의 `.env`를 준비하고, `DATABASE_URL`에는 VPN 등으로 접근할 수 있는 DB의 실제 사설 DNS 이름과 전용 계정을 입력한다. OCI 콘솔의 VM 표시 이름은 DNS 이름과 다를 수 있다. 최초 DB·역할 생성과 TLS 설정은 아래 2절을 따른다.
