@@ -228,6 +228,11 @@ export function driveRouter(settings: Settings) {
         'INSERT INTO doc_artcl(doc_space_idntfr,up_artcl_idntfr,artcl_nm,s3_objt_key,creatr_acnt_idntfr) VALUES ($1,$2,$3,$4,$5) RETURNING artcl_idntfr AS id',
         [u.space_id, parent, name, key, u.id],
       );
+      if (key)
+        await client.query(
+          'INSERT INTO doc_artcl_txt(artcl_idntfr) VALUES ($1)',
+          [rows[0].id],
+        );
       await client.query(
         'INSERT INTO chg_hstry(oprtr_acnt_idntfr,job_type_cd,trgt_idntfr) VALUES ($1,$2,$3)',
         [u.id, key ? 'file.upload' : 'folder.create', rows[0].id],
@@ -294,6 +299,38 @@ export function driveRouter(settings: Settings) {
       .type('application/octet-stream')
       .set('X-Content-Type-Options', 'nosniff');
     await pipeline(stream, res);
+  });
+  router.get('/files/:id/text', async (req, res) => {
+    const offset = Number(req.query.offset ?? 0);
+    if (!Number.isSafeInteger(offset) || offset < 0 || offset > 8192)
+      throw new HttpError(400, '출처 위치를 확인하세요.');
+    const {
+      rows: [row],
+    } = await db.query(
+      `SELECT a.artcl_nm AS name,t.prcs_stts_cd AS status,t.fail_rsn AS reason,
+      jsonb_array_length(t.src_sctn_list) AS total,
+      ARRAY(SELECT t.src_sctn_list->i FROM generate_series($3::int,least($3::int+9,jsonb_array_length(t.src_sctn_list)-1)) i ORDER BY i) AS segments
+      FROM doc_artcl a JOIN doc_artcl_txt t USING(artcl_idntfr) WHERE a.artcl_idntfr=$1
+      AND a.doc_space_idntfr=$2 AND a.del_grp_idntfr IS NULL`,
+      [req.params.id, res.locals.user.space_id, offset],
+    );
+    if (!row) throw new HttpError(404, '파일을 찾을 수 없습니다.');
+    res
+      .status(row.status === 'processing' ? 202 : 200)
+      .json({
+        ...row,
+        fileId: req.params.id,
+        offset,
+        nextOffset: offset + 10 < row.total ? offset + 10 : null,
+      });
+  });
+  router.post('/files/:id/text/retry', async (req, res) => {
+    await findFile(req.params.id, res.locals.user.space_id);
+    await db.query(
+      "UPDATE doc_artcl_txt SET prcs_stts_cd='processing',fail_rsn=NULL WHERE artcl_idntfr=$1 AND prcs_stts_cd='failed'",
+      [req.params.id],
+    );
+    res.sendStatus(204);
   });
   router.get('/files/:id/preview', async (req, res) => {
     const file = await findFile(req.params.id, res.locals.user.space_id);

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ArrowDownToLine, Maximize2, Minimize2, X } from 'lucide-react';
+import { DocumentSources } from './document-sources';
 import dynamic from 'next/dynamic';
 
 const Markdown = dynamic(() => import('react-markdown'));
@@ -11,14 +12,18 @@ const limit = 100_000;
 
 export function FilePreview({
   file,
+  writable,
   close,
 }: {
   file: { id: string; name: string };
+  writable: boolean;
   close: () => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [expanded, setExpanded] = useState(false);
+  const [sources, setSources] = useState(false);
+  const [pdfPage, setPdfPage] = useState<number | null>(null);
   const resizeLabel = expanded ? '기본 크기로 복원' : '전체 화면으로 확대';
   const src = '/api/files/' + encodeURIComponent(file.id);
   const url = src + '/preview';
@@ -129,15 +134,32 @@ export function FilePreview({
           </button>
         </div>
       </header>
-      <div className="preview-body">
-        {!preview ? (
+      <div className="preview-modes" aria-label="문서 보기 방식">
+        <button aria-pressed={!sources} onClick={() => setSources(false)}>
+          원본 보기
+        </button>
+        <button aria-pressed={sources} onClick={() => setSources(true)}>
+          본문·출처
+        </button>
+      </div>
+      <div className="preview-body" key={String(sources)}>
+        {sources ? (
+          <DocumentSources
+            fileId={file.id}
+            writable={writable}
+            openPage={(n) => {
+              setPdfPage(n);
+              setSources(false);
+            }}
+          />
+        ) : !preview ? (
           <p role="status">파일을 불러오는 중…</p>
         ) : preview.kind === 'error' ? (
           <p role="alert">{preview.message}</p>
         ) : preview.kind === 'pdf' ? (
           <object
             type="application/pdf"
-            data={url}
+            data={pdfPage ? url + '#page=' + pdfPage : url}
             aria-label={file.name + ' PDF 미리보기'}
           >
             <p>

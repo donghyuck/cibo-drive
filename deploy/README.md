@@ -19,6 +19,8 @@ PostgreSQL은 기존 `dev-postgres-vm`의 Cibo 전용 DB를 사용한다. 로컬
 test -f .env || cp .env.example .env
 # .env의 DATABASE_URL, Google 설정 및 S3 설정을 입력한 후
 npm ci
+python3 -m venv apps/api/extraction/.venv
+apps/api/extraction/.venv/bin/pip install -r apps/api/extraction/requirements.txt
 docker compose up -d --wait objects
 npm run infra:check
 npm run dev

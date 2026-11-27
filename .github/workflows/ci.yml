@@ -19,6 +19,8 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: npm
+      - run: python3 -m venv apps/api/extraction/.venv && apps/api/extraction/.venv/bin/pip install -r apps/api/extraction/requirements.txt
+      - run: apps/api/extraction/.venv/bin/python apps/api/extraction/test_extract.py
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
