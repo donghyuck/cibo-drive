@@ -2,6 +2,22 @@
 
 기존 PostgreSQL 서버에 전용 DB를 만들고, 유휴 Linux VM에서 Caddy, Cibo API, SeaweedFS를 실행한다. 브라우저는 HTTPS 한 주소를 사용한다. Caddy가 미리 빌드한 웹 파일을 제공하고 `/api/*`를 내부 API로 전달한다. API는 기존 DB에 메타데이터를, SeaweedFS의 비공개 버킷에 파일 원본을 저장한다.
 
+## 기존 DB를 사용해 로컬에서 먼저 운영하기
+
+PostgreSQL은 기존 `dev-postgres-vm`의 Cibo 전용 DB를 사용한다. 로컬 PC에서는 웹·API를 실행하고 SeaweedFS만 Docker로 띄울 수 있다. 저장소 루트의 `.env`를 준비하고, `DATABASE_URL`에는 VPN 등으로 접근할 수 있는 DB의 실제 사설 DNS 이름과 전용 계정을 입력한다. OCI 콘솔의 VM 표시 이름은 DNS 이름과 다를 수 있다. 최초 DB·역할 생성과 TLS 설정은 아래 2절을 따른다.
+
+```sh
+# 저장소 루트에서 실행. 기존 .env가 있으면 유지한다.
+test -f .env || cp .env.example .env
+# .env의 DATABASE_URL, Google 설정 및 S3 설정을 입력한 후
+npm ci
+docker compose up -d --wait objects
+npm run infra:check
+npm run dev
+```
+
+이 구성에서는 계정·권한·파일 목록은 처음부터 원격 DB에 저장되고, 원본은 로컬 SeaweedFS 볼륨에 저장된다. 앱과 저장소를 OCI로 옮길 때에는 쓰기를 중지하고 DB를 백업한 후 원본을 같은 객체 키로 복사한다. 새 앱에 같은 DB와 새 S3 접속 정보를 설정하고 다운로드를 검증한 뒤 전환한다. 동일 DB에 서로 다른 원본 저장소를 사용하는 앱 두 개가 동시에 쓰지 않도록 한다.
+
 ## 1. 서버와 도메인 준비
 
 - 유휴 서버에서 `uname -m`, `free -h`, `df -h`, `swapon --show`, `docker compose version`을 확인한다. Docker Engine과 Compose 플러그인이 필요하다. 컨테이너 상한은 웹 64 MiB, API 232 MiB, 저장소 352 MiB로 합계 648 MiB다. 나머지는 OS와 Docker가 사용한다. 소수 사용자의 파일럿을 가정한 시작값이다. CPU 한 개를 세 서비스가 공유한다.
