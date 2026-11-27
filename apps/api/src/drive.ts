@@ -118,11 +118,11 @@ export function driveRouter(settings: Settings) {
     const token = randomBytes(32).toString('hex');
     await transaction(db, async (client) => {
       const account = await client.query(
-        `INSERT INTO accounts(issuer,subject,email,status,role)
-        VALUES ('https://accounts.google.com',$1,$2,$3,$4) ON CONFLICT(issuer,subject)
-        DO UPDATE SET email=excluded.email,
-          status=CASE WHEN $5 THEN 'active' ELSE accounts.status END,
-          role=CASE WHEN $5 THEN 'admin' ELSE accounts.role END RETURNING id`,
+        `INSERT INTO user_acnt(oidc_issuer,oidc_subject,user_eml_addr,acnt_stts_cd,role_cd)
+        VALUES ('https://user_acnt.google.com',$1,$2,$3,$4) ON CONFLICT(oidc_issuer,oidc_subject)
+        DO UPDATE SET user_eml_addr=excluded.user_eml_addr,
+          acnt_stts_cd=CASE WHEN $5 THEN 'active' ELSE user_acnt.acnt_stts_cd END,
+          role_cd=CASE WHEN $5 THEN 'admin' ELSE user_acnt.role_cd END RETURNING acnt_idntfr AS id`,
         [
           identity.subject,
           identity.email,
@@ -132,7 +132,7 @@ export function driveRouter(settings: Settings) {
         ],
       );
       await client.query(
-        "INSERT INTO sessions VALUES ($1,$2,now()+interval '8 hours')",
+        "INSERT INTO lgn_ssn VALUES ($1,$2,now()+interval '8 hours')",
         [hash(token), account.rows[0].id],
       );
     });
@@ -141,14 +141,16 @@ export function driveRouter(settings: Settings) {
       .sendStatus(204);
   });
   router.post('/logout', async (req, res) => {
-    await db.query('DELETE FROM sessions WHERE digest=$1', [digest(req)]);
+    await db.query('DELETE FROM lgn_ssn WHERE ssn_tkn_sha256=$1', [
+      digest(req),
+    ]);
     res.clearCookie(cookieName, cookie).sendStatus(204);
   });
   router.use(async (req, res, next) => {
     const { rows } = await db.query(
-      `SELECT a.id,a.email,a.status,a.role,a.subject,m.space_id FROM accounts a
-      JOIN sessions s ON s.account_id=a.id LEFT JOIN memberships m ON m.account_id=a.id
-      WHERE s.digest=$1 AND s.expires_at>now()`,
+      `SELECT a.acnt_idntfr AS id,a.user_eml_addr AS email,a.acnt_stts_cd AS status,a.role_cd AS role,a.oidc_subject AS subject,m.doc_space_idntfr AS space_id FROM user_acnt a
+      JOIN lgn_ssn s ON s.acnt_idntfr=a.acnt_idntfr LEFT JOIN doc_space_acs_authrt m ON m.acnt_idntfr=a.acnt_idntfr
+      WHERE s.ssn_tkn_sha256=$1 AND s.expry_dt>now()`,
       [digest(req)],
     );
     if (!rows.length) throw new HttpError(401, '로그인이 필요합니다.');
@@ -164,7 +166,7 @@ export function driveRouter(settings: Settings) {
   });
   router.get('/admin/accounts', async (_req, res) => {
     const { rows } = await db.query(
-      'SELECT a.id,email,status,role,space_id,subject=$1 AS master FROM accounts a LEFT JOIN memberships m ON m.account_id=a.id ORDER BY email',
+      'SELECT a.acnt_idntfr AS id,user_eml_addr AS email,acnt_stts_cd AS status,role_cd AS role,doc_space_idntfr AS space_id,oidc_subject=$1 AS master FROM user_acnt a LEFT JOIN doc_space_acs_authrt m ON m.acnt_idntfr=a.acnt_idntfr ORDER BY user_eml_addr',
       [masterSubject],
     );
     res.json(rows);
@@ -179,7 +181,7 @@ export function driveRouter(settings: Settings) {
       throw new HttpError(400, '계정 설정을 확인하세요.');
     await transaction(db, async (client) => {
       const account = await client.query(
-        'SELECT subject FROM accounts WHERE id=$1 FOR UPDATE',
+        'SELECT oidc_subject AS subject FROM user_acnt WHERE acnt_idntfr=$1 FOR UPDATE',
         [req.params.id],
       );
       if (!account.rowCount)
@@ -192,22 +194,22 @@ export function driveRouter(settings: Settings) {
           400,
           '마스터 관리자 계정은 활성 관리자여야 합니다.',
         );
-      await client.query('UPDATE accounts SET status=$1,role=$2 WHERE id=$3', [
-        status,
-        role,
-        req.params.id,
-      ]);
+      await client.query(
+        'UPDATE user_acnt SET acnt_stts_cd=$1,role_cd=$2 WHERE acnt_idntfr=$3',
+        [status, role, req.params.id],
+      );
       if (access)
         await client.query(
-          'INSERT INTO memberships VALUES ($1,1) ON CONFLICT DO NOTHING',
+          'INSERT INTO doc_space_acs_authrt VALUES ($1,1) ON CONFLICT DO NOTHING',
           [req.params.id],
         );
       else
-        await client.query('DELETE FROM memberships WHERE account_id=$1', [
-          req.params.id,
-        ]);
+        await client.query(
+          'DELETE FROM doc_space_acs_authrt WHERE acnt_idntfr=$1',
+          [req.params.id],
+        );
       await client.query(
-        "INSERT INTO changes(actor,action,target) VALUES ($1,'account.update',$2)",
+        "INSERT INTO chg_hstry(oprtr_acnt_idntfr,job_type_cd,trgt_idntfr) VALUES ($1,'account.update',$2)",
         [res.locals.user.id, req.params.id],
       );
     });
@@ -226,8 +228,8 @@ export function driveRouter(settings: Settings) {
   });
   async function folder(id: unknown, space: number) {
     const { rows } = await db.query(
-      `SELECT id,name,parent_id FROM entries WHERE space_id=$1 AND object_key IS NULL
-      AND (CASE WHEN $2::uuid IS NULL THEN parent_id IS NULL ELSE id=$2 END)`,
+      `SELECT artcl_idntfr AS id,artcl_nm AS name,up_artcl_idntfr AS parent_id FROM doc_artcl WHERE doc_space_idntfr=$1 AND s3_objt_key IS NULL
+      AND (CASE WHEN $2::uuid IS NULL THEN up_artcl_idntfr IS NULL ELSE artcl_idntfr=$2 END)`,
       [space, id ?? null],
     );
     if (!rows.length) throw new HttpError(404, '폴더를 찾을 수 없습니다.');
@@ -236,7 +238,7 @@ export function driveRouter(settings: Settings) {
   router.get('/folder', async (req, res) => {
     const current = await folder(req.query.id, res.locals.user.space_id);
     const { rows } = await db.query(
-      'SELECT id,name,object_key IS NULL AS folder FROM entries WHERE parent_id=$1 ORDER BY folder DESC,name',
+      'SELECT artcl_idntfr AS id,artcl_nm AS name,s3_objt_key IS NULL AS folder FROM doc_artcl WHERE up_artcl_idntfr=$1 ORDER BY folder DESC,artcl_nm',
       [current.id],
     );
     res.json({ current, entries: rows });
@@ -250,11 +252,11 @@ export function driveRouter(settings: Settings) {
     return transaction(db, async (client) => {
       const u = res.locals.user;
       const { rows } = await client.query(
-        'INSERT INTO entries(space_id,parent_id,name,object_key,created_by) VALUES ($1,$2,$3,$4,$5) RETURNING id',
+        'INSERT INTO doc_artcl(doc_space_idntfr,up_artcl_idntfr,artcl_nm,s3_objt_key,creatr_acnt_idntfr) VALUES ($1,$2,$3,$4,$5) RETURNING artcl_idntfr AS id',
         [u.space_id, parent, name, key, u.id],
       );
       await client.query(
-        'INSERT INTO changes(actor,action,target) VALUES ($1,$2,$3)',
+        'INSERT INTO chg_hstry(oprtr_acnt_idntfr,job_type_cd,trgt_idntfr) VALUES ($1,$2,$3)',
         [u.id, key ? 'file.upload' : 'folder.create', rows[0].id],
       );
       return rows[0];
@@ -286,7 +288,7 @@ export function driveRouter(settings: Settings) {
       } catch (error) {
         // A lost COMMIT response may still represent a committed file.
         const referenced = await db.query(
-          'SELECT 1 FROM entries WHERE object_key=$1',
+          'SELECT 1 FROM doc_artcl WHERE s3_objt_key=$1',
           [key],
         );
         if (!referenced.rowCount)
@@ -297,7 +299,7 @@ export function driveRouter(settings: Settings) {
   );
   router.get('/files/:id', async (req, res) => {
     const { rows } = await db.query(
-      'SELECT object_key,name FROM entries WHERE id=$1 AND space_id=$2 AND object_key IS NOT NULL',
+      'SELECT s3_objt_key AS object_key,artcl_nm AS name FROM doc_artcl WHERE artcl_idntfr=$1 AND doc_space_idntfr=$2 AND s3_objt_key IS NOT NULL',
       [req.params.id, res.locals.user.space_id],
     );
     if (!rows.length) throw new HttpError(404, '파일을 찾을 수 없습니다.');
@@ -325,18 +327,16 @@ export function driveRouter(settings: Settings) {
               : error.status === 400
                 ? 400
                 : 500;
-    res
-      .status(status)
-      .json({
-        error:
-          error instanceof HttpError
-            ? error.message
-            : status === 409
-              ? '같은 이름이 있습니다.'
-              : status === 413
-                ? '10 MiB 이하 파일을 선택하세요.'
-                : '요청을 처리할 수 없습니다.',
-      });
+    res.status(status).json({
+      error:
+        error instanceof HttpError
+          ? error.message
+          : status === 409
+            ? '같은 이름이 있습니다.'
+            : status === 413
+              ? '10 MiB 이하 파일을 선택하세요.'
+              : '요청을 처리할 수 없습니다.',
+    });
   }) satisfies express.ErrorRequestHandler);
   return router;
 }

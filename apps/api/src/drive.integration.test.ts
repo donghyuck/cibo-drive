@@ -38,7 +38,7 @@ test('team approval, space access and original file lifecycle', async (t) => {
     try {
       for (const { object_key } of (
         await db.query(
-          'SELECT object_key FROM entries WHERE object_key IS NOT NULL',
+          'SELECT s3_objt_key AS object_key FROM doc_artcl WHERE s3_objt_key IS NOT NULL',
         )
       ).rows) {
         await s3.send(
@@ -54,7 +54,7 @@ test('team approval, space access and original file lifecycle', async (t) => {
   });
   await Promise.all([migrate(db), migrate(db)]);
   assert.equal(
-    (await db.query('SELECT count(*) FROM entries')).rows[0].count,
+    (await db.query('SELECT count(*) FROM doc_artcl')).rows[0].count,
     '1',
   );
   const app = express();
@@ -150,7 +150,10 @@ test('team approval, space access and original file lifecycle', async (t) => {
     [{ id, name: '회의록.md', folder: false }],
   );
   const key = (
-    await db.query('SELECT object_key FROM entries WHERE id=$1', [id])
+    await db.query(
+      'SELECT s3_objt_key AS object_key FROM doc_artcl WHERE artcl_idntfr=$1',
+      [id],
+    )
   ).rows[0].object_key;
   assert.equal(
     (await fetch(env.S3_ENDPOINT + '/' + env.S3_BUCKET + '/' + key)).status,
@@ -177,4 +180,60 @@ test('team approval, space access and original file lifecycle', async (t) => {
   );
   assert.equal((await post('logout', member, {})).status, 204);
   assert.equal((await request('me', member)).status, 401);
+});
+
+test('legacy M1 records and relationships survive physical renaming', async () => {
+  const { readFile } = await import('node:fs/promises');
+  assert.ok(process.env.DATABASE_URL);
+  const schema = 'upgrade_' + randomUUID().replaceAll('-', '');
+  const setup = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+  await setup.query('CREATE SCHEMA ' + schema);
+  const db = new pg.Pool({
+    connectionString: process.env.DATABASE_URL,
+    options: '-c search_path=' + schema,
+  });
+  try {
+    await db.query(
+      await readFile(
+        new URL('../migrations/001-initial.sql', import.meta.url),
+        'utf8',
+      ),
+    );
+    const user = randomUUID(),
+      file = randomUUID(),
+      key = randomUUID();
+    await db.query(
+      "INSERT INTO accounts VALUES ($1,'issuer','subject','a@example.com','active','editor')",
+      [user],
+    );
+    await db.query('INSERT INTO memberships VALUES ($1,1)', [user]);
+    await db.query("INSERT INTO sessions VALUES ('digest',$1,now())", [user]);
+    await db.query(
+      "INSERT INTO entries SELECT $1,1,id,'legacy.txt',$2,$3 FROM entries WHERE parent_id IS NULL",
+      [file, key, user],
+    );
+    await db.query(
+      "INSERT INTO changes(actor,action,target) VALUES ($1,'file.upload',$2)",
+      [user, file],
+    );
+    await migrate(db);
+    await migrate(db);
+    const { rows } = await db.query(
+      `SELECT a.user_eml_addr, e.s3_objt_key, h.chg_hstry_sn
+      FROM user_acnt a JOIN doc_space_acs_authrt m USING(acnt_idntfr)
+      JOIN lgn_ssn s USING(acnt_idntfr) JOIN doc_space sp USING(doc_space_idntfr)
+      JOIN doc_artcl e ON e.doc_space_idntfr=sp.doc_space_idntfr AND e.creatr_acnt_idntfr=a.acnt_idntfr
+      JOIN doc_artcl parent ON e.up_artcl_idntfr=parent.artcl_idntfr
+      JOIN chg_hstry h ON h.trgt_idntfr=e.artcl_idntfr AND h.oprtr_acnt_idntfr=a.acnt_idntfr
+      WHERE e.artcl_idntfr=$1 AND s.ssn_tkn_sha256='digest'`,
+      [file],
+    );
+    assert.deepEqual(rows, [
+      { user_eml_addr: 'a@example.com', s3_objt_key: key, chg_hstry_sn: '1' },
+    ]);
+  } finally {
+    await db.end();
+    await setup.query('DROP SCHEMA ' + schema + ' CASCADE');
+    await setup.end();
+  }
 });
