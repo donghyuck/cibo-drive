@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ArrowDownToLine,
   ArrowDownAZ,
@@ -9,6 +9,7 @@ import {
   FolderPlus,
   HardDrive,
   LayoutGrid,
+  Layers3,
   List,
   Search,
   Upload,
@@ -37,7 +38,18 @@ export function FileBrowser({
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState('전체');
   const [descending, setDescending] = useState(false);
-  const [grid, setGrid] = useState(false);
+  const [grid, setGrid] = useState(true);
+  useEffect(() => {
+    try {
+      setGrid(localStorage.getItem('cibo-view') !== 'list');
+    } catch {}
+  }, []);
+  function chooseView(cards: boolean) {
+    setGrid(cards);
+    try {
+      localStorage.setItem('cibo-view', cards ? 'grid' : 'list');
+    } catch {}
+  }
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -172,49 +184,62 @@ export function FileBrowser({
             </span>
           ))}
         </nav>
-        <div className="heading">
-          <div>
-            <h1>{current.name}</h1>
-            <p>
-              폴더 {folder.entries.filter((i) => i.folder).length}개{' '}
-              <span>·</span> 파일{' '}
-              {folder.entries.filter((i) => !i.folder).length}개
-            </p>
-          </div>
-          {writable && (
-            <div className="actions">
-              <button
-                disabled={busy}
-                onClick={() => {
-                  setName('');
-                  setError('');
-                  dialog.current?.showModal();
-                }}
-              >
-                <FolderPlus />새 폴더
-              </button>
-              <button
-                className="primary"
-                disabled={busy}
-                onClick={() => picker.current?.click()}
-              >
-                <Upload />
-                파일 업로드
-              </button>
-              <input
-                hidden
-                ref={picker}
-                type="file"
-                multiple
-                accept=".pdf,.docx,.txt,.md"
-                aria-label="업로드할 파일"
-                onChange={(e) => {
-                  upload(Array.from(e.target.files ?? []));
-                  e.target.value = '';
-                }}
-              />
+        <div className="cover">
+          <div className="cover-art" aria-hidden="true">
+            <div className="folio">
+              <i className="folio-back" />
+              <i className="leaf one" />
+              <i className="leaf two" />
+              <i className="leaf three" />
+              <i className="folio-front">
+                <Layers3 />
+              </i>
             </div>
-          )}
+          </div>
+          <div className="heading">
+            <div>
+              <h1>{current.name}</h1>
+              <p>
+                폴더 {folder.entries.filter((i) => i.folder).length}개{' '}
+                <span>·</span> 파일{' '}
+                {folder.entries.filter((i) => !i.folder).length}개
+              </p>
+            </div>
+            {writable && (
+              <div className="actions">
+                <button
+                  disabled={busy}
+                  onClick={() => {
+                    setName('');
+                    setError('');
+                    dialog.current?.showModal();
+                  }}
+                >
+                  <FolderPlus />새 폴더
+                </button>
+                <button
+                  className="primary"
+                  disabled={busy}
+                  onClick={() => picker.current?.click()}
+                >
+                  <Upload />
+                  파일 업로드
+                </button>
+                <input
+                  hidden
+                  ref={picker}
+                  type="file"
+                  multiple
+                  accept=".pdf,.docx,.txt,.md"
+                  aria-label="업로드할 파일"
+                  onChange={(e) => {
+                    upload(Array.from(e.target.files ?? []));
+                    e.target.value = '';
+                  }}
+                />
+              </div>
+            )}
+          </div>
         </div>
         <div className="tools">
           <div className="filters" aria-label="항목 종류">
@@ -242,14 +267,14 @@ export function FileBrowser({
               <button
                 aria-label="목록 보기"
                 aria-pressed={!grid}
-                onClick={() => setGrid(false)}
+                onClick={() => chooseView(false)}
               >
                 <List />
               </button>
               <button
                 aria-label="격자 보기"
                 aria-pressed={grid}
-                onClick={() => setGrid(true)}
+                onClick={() => chooseView(true)}
               >
                 <LayoutGrid />
               </button>
@@ -281,6 +306,18 @@ export function FileBrowser({
                       }
                     >
                       {item.folder ? <FolderIcon /> : <FileText />}
+                      {grid && (
+                        <span className="cover-glyph" aria-hidden="true">
+                          {item.folder ? (
+                            <FolderIcon />
+                          ) : (
+                            <span className="sheet">
+                              <b>{type}</b>
+                              <i />
+                            </span>
+                          )}
+                        </span>
+                      )}
                     </span>
                     <span className="filename">{item.name}</span>
                     <span className="kind">{type}</span>
@@ -307,6 +344,21 @@ export function FileBrowser({
                   </li>
                 );
               })}
+              {grid && writable && !query && filter === '전체' && (
+                <li className="upload-tile">
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => picker.current?.click()}
+                  >
+                    <span>
+                      <Upload />
+                    </span>
+                    <strong>파일 추가</strong>
+                    <small>클릭하거나 파일을 끌어 놓으세요</small>
+                  </button>
+                </li>
+              )}
             </ul>
           </>
         ) : (
