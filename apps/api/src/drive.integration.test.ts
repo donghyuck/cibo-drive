@@ -206,7 +206,46 @@ test('team approval, space access and original file lifecycle', async (t) => {
   assert.equal((await post('folders', member, { name: '차단' })).status, 403);
   assert.equal((await upload('차단.txt', 'x')).status, 403);
   assert.equal(await (await request(download, member)).text(), data);
+  const preview = download + '/preview';
+  let reads = 0;
+  s3.middlewareStack.add(
+    (next, context) => async (args) => {
+      if (context.commandName === 'GetObjectCommand') reads++;
+      return next(args);
+    },
+    { step: 'initialize', name: 'countPreviewReads' },
+  );
+  try {
+    const [head, first, tail] = await Promise.all([
+      request(preview, member, { method: 'HEAD' }),
+      request(preview, member, { headers: { Range: 'bytes=0-2' } }),
+      request(preview, member, { headers: { Range: 'bytes=-1' } }),
+    ]);
+    assert.equal(head.status, 200);
+    assert.equal(first.status, 206);
+    assert.equal(
+      first.headers.get('content-range'),
+      'bytes 0-2/' + Buffer.byteLength(data),
+    );
+    assert.equal(await first.text(), '첫');
+    assert.equal(await tail.text(), '\n');
+    assert.equal(await (await request(preview, member)).text(), data);
+    assert.equal(
+      (await request(preview, member, { headers: { Range: 'bytes=999-' } }))
+        .status,
+      416,
+    );
+    assert.equal(reads, 1);
+  } finally {
+    s3.middlewareStack.remove('countPreviewReads');
+  }
   await grant('active', 'editor', false);
+  assert.equal(
+    (await request(preview, member, { headers: { Range: 'bytes=0-2' } }))
+      .status,
+    403,
+  );
+  assert.equal((await request(preview, '')).status, 401);
   assert.equal((await request(download, member)).status, 403);
   await grant('suspended', 'editor', true);
   assert.equal((await request(download, member)).status, 403);

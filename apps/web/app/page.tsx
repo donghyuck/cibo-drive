@@ -1,5 +1,9 @@
 'use client';
 
+import { Layers3 } from 'lucide-react';
+import { Sidebar } from './sidebar';
+import { FileBrowser, type Folder } from './file-browser';
+import { api, post } from './drive-api';
 import Script from 'next/script';
 import { useEffect, useRef, useState } from 'react';
 
@@ -12,10 +16,6 @@ type Account = {
   status: Status;
   space_id: number | null;
   master?: boolean;
-};
-type Folder = {
-  current: { id: string; name: string; parent_id: string | null };
-  entries: { id: string; name: string; folder: boolean }[];
 };
 type Google = {
   accounts: {
@@ -34,24 +34,6 @@ declare global {
   }
 }
 
-async function api(path: string, init?: RequestInit) {
-  const res = await fetch('/api/' + path, { cache: 'no-store', ...init });
-  if (!res.ok)
-    throw Object.assign(
-      new Error(
-        (await res.json().catch(() => ({}))).error ?? '요청에 실패했습니다.',
-      ),
-      { status: res.status },
-    );
-  return res.status === 204 ? null : res.json();
-}
-function post(path: string, body: object) {
-  return api(path, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-}
 function AccountForm({
   account,
   save,
@@ -112,8 +94,8 @@ export default function Drive() {
   const [clientId, setClientId] = useState('');
   const [ready, setReady] = useState(false);
   const [message, setMessage] = useState('');
-  const [name, setName] = useState('');
-  const [file, setFile] = useState<File | null>(null);
+  const [view, setView] = useState<'files' | 'accounts'>('files');
+  const [homeKey, setHomeKey] = useState(0);
   const login = useRef<HTMLDivElement>(null);
   async function refresh() {
     const me: Account = await api('me');
@@ -162,39 +144,42 @@ export default function Drive() {
       size: 'large',
     });
   }, [clientId, ready, user]);
-  async function open(id: string) {
-    setFolder(await api('folder?id=' + id));
-  }
   return (
-    <main className="shell">
-      <aside>
-        <strong>Cibo Drive</strong>
-        <p>팀 파일 저장소</p>
-        {user && (
-          <>
-            <p>{user.email}</p>
-            <button
-              onClick={() =>
-                void act(async () => {
-                  await post('logout', {});
-                  setUser(null);
-                  setFolder(null);
-                  setAccounts([]);
-                  setFile(null);
-                  setName('');
-                })
-              }
-            >
-              로그아웃
-            </button>
-          </>
-        )}
-      </aside>
-      <section>
-        <h1>{folder?.current.name ?? '팀 문서 공간'}</h1>
+    <div className="shell">
+      <Sidebar
+        user={user}
+        view={view}
+        canManage={accounts.length > 0}
+        onFiles={() =>
+          void act(async () => {
+            await refresh();
+            setHomeKey((k) => k + 1);
+            setView('files');
+          })
+        }
+        onManage={() => {
+          setView('accounts');
+          void act(refresh);
+        }}
+        onLogout={() =>
+          void act(async () => {
+            await post('logout', {});
+            setUser(null);
+            setFolder(null);
+            setAccounts([]);
+            setView('files');
+          })
+        }
+      />
+      <main>
         {message && <p role="alert">{message}</p>}
         {!user && (
-          <>
+          <section className="welcome">
+            <span className="brand-mark">
+              <Layers3 />
+            </span>
+            <h1>팀 문서 공간</h1>
+            <p>Google 계정으로 로그인하세요.</p>
             <Script
               src="https://accounts.google.com/gsi/client"
               onReady={() => setReady(true)}
@@ -203,112 +188,11 @@ export default function Drive() {
               }
             />
             <div ref={login} />
-          </>
+          </section>
         )}
-        {user && !folder && (
-          <p>
-            {user.status === 'pending'
-              ? '관리자 승인을 기다리고 있습니다.'
-              : user.status === 'suspended'
-                ? '정지된 계정입니다.'
-                : '문서 공간 접근 권한이 필요합니다.'}{' '}
-            <button onClick={() => void act(refresh)}>새로고침</button>
-          </p>
-        )}
-        {folder && (
-          <>
-            {folder.current.parent_id && (
-              <button
-                onClick={() => void act(() => open(folder.current.parent_id!))}
-              >
-                상위 폴더
-              </button>
-            )}
-            {user?.role !== 'viewer' && (
-              <>
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    void act(async () => {
-                      await post('folders', {
-                        parent: folder.current.id,
-                        name,
-                      });
-                      setName('');
-                      await open(folder.current.id);
-                    });
-                  }}
-                >
-                  <input
-                    required
-                    aria-label="새 폴더 이름"
-                    placeholder="새 폴더 이름"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                  />
-                  <button>폴더 만들기</button>
-                </form>
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    const form = e.currentTarget;
-                    void act(async () => {
-                      if (!file) return;
-                      await api(
-                        'files?' +
-                          new URLSearchParams({
-                            parent: folder.current.id,
-                            name: file.name,
-                          }),
-                        {
-                          method: 'POST',
-                          headers: {
-                            'Content-Type': 'application/octet-stream',
-                          },
-                          body: file,
-                        },
-                      );
-                      form.reset();
-                      setFile(null);
-                      await open(folder.current.id);
-                    });
-                  }}
-                >
-                  <input
-                    aria-label="업로드할 파일"
-                    required
-                    type="file"
-                    accept=".pdf,.docx,.txt,.md"
-                    onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-                  />
-                  <button>업로드</button>
-                </form>
-              </>
-            )}
-            {folder.entries.length ? (
-              <ul>
-                {folder.entries.map((item) => (
-                  <li key={item.id}>
-                    {item.folder ? (
-                      <button onClick={() => void act(() => open(item.id))}>
-                        {item.name}
-                      </button>
-                    ) : (
-                      <a href={'/api/files/' + item.id} download>
-                        {item.name}
-                      </a>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p>폴더가 비어 있습니다.</p>
-            )}
-          </>
-        )}
-        {accounts.length > 0 && (
-          <>
-            <h2>계정 관리</h2>
+        {user && view === 'accounts' && accounts.length > 0 ? (
+          <section className="admin">
+            <h1>계정 관리</h1>
             {accounts.map((a) => (
               <AccountForm
                 key={a.id}
@@ -325,9 +209,30 @@ export default function Drive() {
                 }
               />
             ))}
-          </>
+          </section>
+        ) : (
+          user &&
+          (folder ? (
+            <FileBrowser
+              key={homeKey}
+              initial={folder}
+              writable={user.role !== 'viewer'}
+            />
+          ) : (
+            <section className="welcome">
+              <h1>팀 문서 공간</h1>
+              <p>
+                {user.status === 'pending'
+                  ? '관리자 승인을 기다리고 있습니다.'
+                  : user.status === 'suspended'
+                    ? '정지된 계정입니다.'
+                    : '문서 공간 접근 권한이 필요합니다.'}
+              </p>
+              <button onClick={() => void act(refresh)}>새로고침</button>
+            </section>
+          ))
         )}
-      </section>
-    </main>
+      </main>
+    </div>
   );
 }
