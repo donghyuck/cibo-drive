@@ -1,6 +1,7 @@
 'use client';
 
 import { Layers3 } from 'lucide-react';
+import { McpConnections } from './mcp-connections';
 import { Sidebar } from './sidebar';
 import { FileBrowser, type Folder } from './file-browser';
 import { api, post } from './drive-api';
@@ -94,7 +95,7 @@ export default function Drive() {
   const [clientId, setClientId] = useState('');
   const [ready, setReady] = useState(false);
   const [message, setMessage] = useState('');
-  const [view, setView] = useState<'files' | 'accounts'>('files');
+  const [view, setView] = useState<'files' | 'accounts' | 'mcp'>('files');
   const [homeKey, setHomeKey] = useState(0);
   const login = useRef<HTMLDivElement>(null);
   async function refresh() {
@@ -157,6 +158,7 @@ export default function Drive() {
             setView('files');
           })
         }
+        onMcp={() => setView('mcp')}
         onManage={() => {
           setView('accounts');
           void act(refresh);
@@ -190,7 +192,11 @@ export default function Drive() {
             <div ref={login} />
           </section>
         )}
-        {user && view === 'accounts' && accounts.length > 0 ? (
+        {user && view === 'mcp' ? (
+          <McpConnections
+            canIssue={user.status === 'active' && Boolean(user.space_id)}
+          />
+        ) : user && view === 'accounts' && accounts.length > 0 ? (
           <section className="admin">
             <h1>계정 관리</h1>
             {accounts.map((a) => (

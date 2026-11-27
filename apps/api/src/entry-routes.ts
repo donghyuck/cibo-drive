@@ -3,16 +3,9 @@ import type pg from 'pg';
 import { extname } from 'node:path';
 import { HttpError, lockSpace, nameOf, transaction } from './drive-db.js';
 
-const tree = `WITH RECURSIVE tree AS (
- SELECT a.*, ARRAY[a.artcl_nm] AS path, ARRAY[a.artcl_idntfr] AS ids FROM doc_artcl a
- WHERE a.doc_space_idntfr=$1 AND a.up_artcl_idntfr IS NULL AND a.del_grp_idntfr IS NULL
- UNION ALL
- SELECT a.*,t.path||a.artcl_nm,t.ids||a.artcl_idntfr FROM tree t
- JOIN doc_artcl a ON a.up_artcl_idntfr=t.artcl_idntfr WHERE a.doc_space_idntfr=$1 AND a.del_grp_idntfr IS NULL
-)`;
+import { tree, searchFiles } from './drive-reads.js';
 const fields =
   'artcl_idntfr AS id, artcl_nm AS name, s3_objt_key IS NULL AS folder';
-
 function checkedName(input: unknown, existing: string, isFile: boolean) {
   const name = nameOf(input);
   if (isFile && extname(existing).toLowerCase() !== extname(name).toLowerCase())
@@ -26,12 +19,7 @@ export function entryRoutes(db: pg.Pool) {
     const q = req.query.q;
     if (typeof q !== 'string' || !q.trim() || q.length > 200)
       throw new HttpError(400, '검색어를 확인하세요.');
-    const { rows } = await db.query(
-      tree +
-        ` SELECT ${fields},path[1:cardinality(path)-1] AS location FROM tree
-      WHERE s3_objt_key IS NOT NULL AND strpos(lower(artcl_nm),lower($2))>0 ORDER BY path, artcl_idntfr`,
-      [res.locals.user.space_id, q.trim()],
-    );
+    const rows = await searchFiles(db, res.locals.user.space_id, q.trim());
     res.json(rows);
   });
   r.get('/destinations/:id', async (req, res) => {
