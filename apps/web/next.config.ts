@@ -5,6 +5,7 @@ const staticExport = process.env.CIBO_STATIC_EXPORT === 'true';
 const config: NextConfig = {
   output: staticExport ? 'export' : 'standalone',
   poweredByHeader: false,
+  devIndicators: { position: 'bottom-right' },
   experimental: { proxyClientMaxBodySize: '12mb' },
   rewrites: staticExport ? undefined : async () => {
     return [
