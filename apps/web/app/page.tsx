@@ -1,6 +1,7 @@
 'use client';
 
-import { Files, Layers3, LogOut, UsersRound } from 'lucide-react';
+import { Layers3 } from 'lucide-react';
+import { Sidebar } from './sidebar';
 import { FileBrowser, type Folder } from './file-browser';
 import { api, post } from './drive-api';
 import Script from 'next/script';
@@ -145,75 +146,31 @@ export default function Drive() {
   }, [clientId, ready, user]);
   return (
     <div className="shell">
-      <aside className="rail">
-        <div className="brand">
-          <span className="brand-mark">
-            <Layers3 />
-          </span>
-          Cibo Drive
-        </div>
-        {user && (
-          <nav aria-label="워크스페이스">
-            <button
-              aria-current={view === 'files' ? 'page' : undefined}
-              onClick={() => {
-                void act(async () => {
-                  await refresh();
-                  setHomeKey((k) => k + 1);
-                  setView('files');
-                });
-              }}
-            >
-              <Files />팀 문서 공간
-            </button>
-            {accounts.length > 0 && (
-              <button
-                aria-current={view === 'accounts' ? 'page' : undefined}
-                onClick={() => {
-                  setView('accounts');
-                  void act(refresh);
-                }}
-              >
-                <UsersRound />
-                계정 관리
-              </button>
-            )}
-          </nav>
-        )}
-        {user && (
-          <div className="profile">
-            <span className="avatar" aria-hidden="true">
-              {user.email.slice(0, 1).toUpperCase()}
-            </span>
-            <div className="identity">
-              <strong title={user.email}>{user.email}</strong>
-              <small>
-                {
-                  { admin: '관리자', editor: '편집자', viewer: '조회자' }[
-                    user.role
-                  ]
-                }
-              </small>
-            </div>
-            <button
-              className="icon"
-              aria-label="로그아웃"
-              title="로그아웃"
-              onClick={() =>
-                void act(async () => {
-                  await post('logout', {});
-                  setUser(null);
-                  setFolder(null);
-                  setAccounts([]);
-                  setView('files');
-                })
-              }
-            >
-              <LogOut />
-            </button>
-          </div>
-        )}
-      </aside>
+      <Sidebar
+        user={user}
+        view={view}
+        canManage={accounts.length > 0}
+        onFiles={() =>
+          void act(async () => {
+            await refresh();
+            setHomeKey((k) => k + 1);
+            setView('files');
+          })
+        }
+        onManage={() => {
+          setView('accounts');
+          void act(refresh);
+        }}
+        onLogout={() =>
+          void act(async () => {
+            await post('logout', {});
+            setUser(null);
+            setFolder(null);
+            setAccounts([]);
+            setView('files');
+          })
+        }
+      />
       <main>
         {message && <p role="alert">{message}</p>}
         {!user && (
