@@ -1,0 +1,15 @@
+:root { color-scheme: light; font: 16px/1.6 system-ui, sans-serif; color: #16233c; background: #f5f7fc; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+.shell { min-height: 100vh; display: grid; grid-template-columns: 15rem minmax(0, 1fr); }
+aside { padding: 2rem 1.5rem; background: #fff; border-right: 1px solid #dce2ed; }
+aside strong { font-size: 1.35rem; }
+aside p { color: #52617b; margin-top: .25rem; }
+.selected { display: block; background: #e8efff; color: #163b86; font-weight: 650; padding: .55rem .8rem; border-radius: .6rem; }
+section { padding: clamp(1.25rem, 4vw, 3.5rem); }
+header { display: flex; align-items: center; justify-content: space-between; gap: .75rem; flex-wrap: wrap; }
+h1 { margin: 0 0 .75rem; }
+.badge { color: #20448b; background: #e8efff; border-radius: 999px; padding: .2rem .7rem; font-size: .85rem; }
+.empty { margin-top: 1rem; padding: clamp(1.5rem, 5vw, 4rem); text-align: center; background: white; border: 1px solid #dce2ed; border-radius: 1rem; }
+.empty p { color: #52617b; }
+@media (max-width: 640px) { .shell { grid-template-columns: 1fr; } aside { border-right: 0; border-bottom: 1px solid #dce2ed; padding: 1rem 1.25rem; } }

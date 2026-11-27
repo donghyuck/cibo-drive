@@ -1,11 +1,37 @@
-# cibo-drive
+# Cibo Drive
+
+[![라이선스](https://img.shields.io/github/license/donghyuck/cibo-drive)](./LICENSE)
+[![최신 릴리스](https://img.shields.io/github/v/release/donghyuck/cibo-drive?label=release)](https://github.com/donghyuck/cibo-drive/releases)
+[![main CI](https://github.com/donghyuck/cibo-drive/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/donghyuck/cibo-drive/actions/workflows/ci.yml)
+
+> 버전은 GitHub Releases의 최신 정식 릴리스를 표시합니다. CI 상태는 `main`의 마지막 워크플로 실행을 기준으로 합니다.
 사람과 AI 에이전트가 함께 쓰는 팀 파일 저장소입니다. 팀원은 웹에서 파일을 올리고 정리하고, AI 에이전트는 MCP를 통해 같은 접근 권한 안에서 파일을 찾고 읽습니다. 먼저 구글 드라이브의 기본 파일 관리 기능을 대체하고, 이후에는 파일명을 몰라도 질문만으로 관련 문서와 출처를 찾는 기능을 추가합니다.
 
-# Document RAG MCP
+## 개요
 
 팀이 파일을 보관하고, 사람은 웹에서, AI 에이전트는 MCP에서 **같은 저장소의 파일을 권한에 맞게 찾고 열 수 있도록** 하는 서비스입니다. Studio API와 별도 저장소에서 개발합니다.
 
-> 상태: 설계 단계. 서버, 로그인, MCP는 아직 구현되지 않았습니다.
+## 로컬에서 시작하기
+
+필수: Node.js 24, npm. PostgreSQL과 S3 호환 저장소 연결을 확인하려면 Docker Compose가 필요합니다.
+
+```sh
+npm ci
+npm run dev
+```
+
+- 웹 GUI: <http://127.0.0.1:3000>
+- API 상태: <http://127.0.0.1:4000/healthz>
+- MCP 연결만 시험할 때: `CIBO_ENABLE_LOCAL_MCP=true npm run dev` 후 클라이언트를 <http://127.0.0.1:4000/mcp>에 Streamable HTTP로 연결합니다. 개발용 상태 도구 1개뿐이며, 기본적으로 꺼져 있고 운영 모드에서는 사용할 수 없습니다.
+
+```sh
+cp .env.example .env
+docker compose up -d --wait
+npm run infra:check
+npm run typecheck && npm test && npm run build
+```
+
+현재는 초기 GUI, API 상태 확인, 로컬 MCP 연결 및 개발용 저장소 구성이 있습니다. **Google 로그인·관리자 승인·파일 업로드 및 접근 권한은 아직 구현하지 않았습니다.** Docker의 계정과 포트는 로컬 개발 전용입니다.
 
 ## 1차 목표: 팀 파일 저장소와 MCP 연결
 
@@ -38,7 +64,7 @@ AI 에이전트 ─→ MCP 서버 ──┘
 - DB는 사용자, 공간, 폴더, 파일 ID 및 경로, 저장 객체 키, 권한과 변경 이력을 관리합니다. 폴더나 파일이 이동해도 파일 ID는 유지합니다.
 - 웹과 MCP는 같은 파일 API와 권한 정책을 사용합니다. 업로드 완료 및 검증 후 목록에 표시합니다. PDF·DOCX 텍스트 추출은 비동기로 처리할 수 있으며 추출 실패가 원본 보관과 다운로드를 막지는 않습니다.
 - MVP에서는 관리자 승인 및 파일 변경을 웹에서만 수행합니다. MCP에서 업로드·수정·삭제를 지원하지 않습니다.
-- 원본과 메타데이터를 함께 백업하고 복원까지 검증합니다. 언어·프레임워크와 저장소 제품은 구현 착수 시 선택합니다.
+- 원본과 메타데이터를 함께 백업하고 복원까지 검증합니다. 웹은 Next.js/React, API·MCP는 Node.js/Express와 공식 MCP SDK로 구성합니다. 메타데이터는 PostgreSQL, 파일은 S3 호환 비공개 저장소를 사용합니다.
 
 ## MCP 도구 초안
 
