@@ -37,7 +37,7 @@ npm run typecheck && npm test && npm run build
 위 Docker 서비스를 시작한 뒤 루트 `.env`에 다음 값을 설정하고 `npm run dev`를 실행합니다. API는 시작할 때 PostgreSQL 스키마와 기본 문서 공간을 초기화합니다. Docker 계정과 포트는 로컬 개발용입니다.
 
 - `GOOGLE_CLIENT_ID`에는 Google 웹 애플리케이션 OAuth 클라이언트 ID를 입력합니다. 해당 클라이언트의 승인된 JavaScript 원본에 웹 주소를 등록하고, `CIBO_WEB_ORIGIN`도 같은 값으로 설정합니다. 기본값은 `http://127.0.0.1:3000`입니다.
-- `CIBO_MASTER_GOOGLE_SUB`에는 최초 관리자의 검증된 Google 계정 식별자(`sub`)를 입력합니다. 이 계정은 로그인 시 활성 관리자가 됩니다. 공간 접근은 관리 화면에서 별도로 부여합니다.
+- `CIBO_MASTER_GOOGLE_SUB`에는 최초 관리자의 검증된 Google 계정 식별자(`sub`)를 입력합니다. 식별자를 모르면 이 값을 비운 채 지정할 계정으로 먼저 로그인합니다. 운영자는 DB에서 승인 대기 계정의 `oidc_issuer`가 `https://accounts.google.com`이고 검증된 이메일이 대상 계정과 일치하는지 확인한 뒤 `oidc_subject`를 설정합니다. API를 재시작하고 같은 계정으로 다시 로그인하면 기존 계정이 활성 관리자가 됩니다. 공간 접근은 관리 화면에서 별도로 부여합니다.
 - 팀원이 처음 로그인하면 관리자는 **계정 관리**에서 해당 계정을 활성화하고 편집 또는 조회 역할과 공간 접근을 저장합니다. 팀원은 새로고침 후 폴더를 엽니다.
 - 편집자는 폴더를 생성하고 PDF·DOCX·TXT·MD 원본을 파일당 10 MiB까지 업로드할 수 있습니다. 파일명을 누르면 현재 공간 권한을 확인한 후 원본을 다운로드합니다.
 - `npm run test:drive`는 테스트 전용 PostgreSQL 스키마와 임시 S3 객체로 승인·권한·원본 저장을 검사합니다. 로그인 검증기는 테스트 대역을 사용합니다. 실제 Google 로그인은 등록한 웹 원본에서 확인합니다.

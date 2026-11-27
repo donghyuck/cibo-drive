@@ -27,6 +27,9 @@ export async function migrate(db: pg.Pool) {
         await client.query(sql);
       }
     }
+    // Preserve account IDs, memberships and history from earlier M1 builds.
+    await client.query(`UPDATE user_acnt SET oidc_issuer='https://accounts.google.com'
+      WHERE oidc_issuer='https://user_acnt.google.com'`);
     await client.query('COMMIT');
   } catch (error) {
     await client.query('ROLLBACK');

@@ -107,19 +107,19 @@ export function driveRouter(settings: Settings) {
   router.use(express.json({ limit: '16kb' }));
   router.get('/config', (_req, res) => res.json({ clientId }));
   router.post('/login', async (req, res) => {
-    if (!clientId || !masterSubject)
+    if (!clientId)
       throw new HttpError(503, 'Google 로그인 설정이 필요합니다.');
     if (typeof req.body?.credential !== 'string')
       throw new HttpError(400, '인증 정보가 필요합니다.');
     const identity = await settings.verify(req.body.credential).catch(() => {
       throw new HttpError(401, 'Google 인증에 실패했습니다.');
     });
-    const master = identity.subject === masterSubject;
+    const master = Boolean(masterSubject) && identity.subject === masterSubject;
     const token = randomBytes(32).toString('hex');
     await transaction(db, async (client) => {
       const account = await client.query(
         `INSERT INTO user_acnt(oidc_issuer,oidc_subject,user_eml_addr,acnt_stts_cd,role_cd)
-        VALUES ('https://user_acnt.google.com',$1,$2,$3,$4) ON CONFLICT(oidc_issuer,oidc_subject)
+        VALUES ('https://accounts.google.com',$1,$2,$3,$4) ON CONFLICT(oidc_issuer,oidc_subject)
         DO UPDATE SET user_eml_addr=excluded.user_eml_addr,
           acnt_stts_cd=CASE WHEN $5 THEN 'active' ELSE user_acnt.acnt_stts_cd END,
           role_cd=CASE WHEN $5 THEN 'admin' ELSE user_acnt.role_cd END RETURNING acnt_idntfr AS id`,

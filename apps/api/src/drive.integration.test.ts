@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import pg from 'pg';
 import express from 'express';
 import { DeleteObjectCommand, S3Client } from '@aws-sdk/client-s3';
-import { driveRouter } from './drive.js';
+import { driveRouter, type Settings } from './drive.js';
 import { migrate } from './database.js';
 
 test('team approval, space access and original file lifecycle', async (t) => {
@@ -59,21 +59,20 @@ test('team approval, space access and original file lifecycle', async (t) => {
   );
   const app = express();
   const origin = 'http://127.0.0.1:3000';
-  app.use(
-    '/api',
-    driveRouter({
-      db,
-      s3,
-      bucket: env.S3_BUCKET,
-      origin,
-      clientId: 'test',
-      masterSubject: 'master',
-      verify: async (credential) => {
-        if (!['master', 'member'].includes(credential)) throw new Error();
-        return { subject: credential, email: credential + '@example.com' };
-      },
-    }),
-  );
+  const settings: Settings = {
+    db,
+    s3,
+    bucket: env.S3_BUCKET,
+    origin,
+    clientId: 'test',
+    masterSubject: 'master',
+    verify: async (credential) => {
+      if (!['master', 'member'].includes(credential)) throw new Error();
+      return { subject: credential, email: credential + '@example.com' };
+    },
+  };
+  app.use('/api/bootstrap', driveRouter({ ...settings, masterSubject: '' }));
+  app.use('/api', driveRouter(settings));
   const server = app.listen(0, '127.0.0.1');
   await once(server, 'listening');
   t.after(
@@ -95,12 +94,29 @@ test('team approval, space access and original file lifecycle', async (t) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
-  async function login(credential: string) {
-    const res = await post('login', '', { credential });
+  async function login(credential: string, path = 'login') {
+    const res = await post(path, '', { credential });
     assert.equal(res.status, 204);
     return res.headers.get('set-cookie')!.split(';')[0];
   }
+  const initial = await login('master', 'bootstrap/login');
+  const pendingMaster = await (await request('me', initial)).json();
+  assert.equal(pendingMaster.status, 'pending');
+  assert.equal(pendingMaster.role, 'viewer');
+  assert.equal((await request('admin/accounts', initial)).status, 403);
   const master = await login('master');
+  const activated = await (await request('me', master)).json();
+  assert.equal(activated.id, pendingMaster.id);
+  assert.equal(activated.status, 'active');
+  assert.equal(activated.role, 'admin');
+  assert.equal(
+    (
+      await db.query('SELECT oidc_issuer FROM user_acnt WHERE acnt_idntfr=$1', [
+        activated.id,
+      ])
+    ).rows[0].oidc_issuer,
+    'https://accounts.google.com',
+  );
   const member = await login('member');
   const me = await (await request('me', member)).json();
   assert.equal(me.status, 'pending');
@@ -140,6 +156,24 @@ test('team approval, space access and original file lifecycle', async (t) => {
     (await upload('large.txt', 'x'.repeat(10 * 1024 * 1024 + 1))).status,
     413,
   );
+  s3.middlewareStack.add(
+    () => async () => {
+      throw new Error('Simulated storage failure');
+    },
+    {
+      step: 'initialize',
+      name: 'simulateStorageFailure',
+    },
+  );
+  try {
+    assert.equal((await upload('저장실패.txt', 'sample')).status, 500);
+  } finally {
+    s3.middlewareStack.remove('simulateStorageFailure');
+  }
+  assert.deepEqual(
+    (await (await request('folder?id=' + child, member)).json()).entries,
+    [],
+  );
   const data = '첫 문서\n';
   const saved = await upload('회의록.md', data);
   assert.equal(saved.status, 201);
@@ -155,11 +189,19 @@ test('team approval, space access and original file lifecycle', async (t) => {
       [id],
     )
   ).rows[0].object_key;
-  const anonymous = await fetch(env.S3_ENDPOINT + '/' + env.S3_BUCKET + '/' + key);
+  const anonymous = await fetch(
+    env.S3_ENDPOINT + '/' + env.S3_BUCKET + '/' + key,
+  );
   // Private S3 implementations can deny access or conceal object existence.
-  assert.ok([403, 404].includes(anonymous.status), 'anonymous object read must be denied');
+  assert.ok(
+    [403, 404].includes(anonymous.status),
+    'anonymous object read must be denied',
+  );
   const download = 'files/' + id;
   assert.equal(await (await request(download, member)).text(), data);
+  assert.equal((await request(download, master)).status, 403);
+  await grant('pending', 'editor', true);
+  assert.equal((await request(download, member)).status, 403);
   await grant('active', 'viewer', true);
   assert.equal((await post('folders', member, { name: '차단' })).status, 403);
   assert.equal((await upload('차단.txt', 'x')).status, 403);
@@ -202,7 +244,7 @@ test('legacy M1 records and relationships survive physical renaming', async () =
       file = randomUUID(),
       key = randomUUID();
     await db.query(
-      "INSERT INTO accounts VALUES ($1,'issuer','subject','a@example.com','active','editor')",
+      "INSERT INTO accounts VALUES ($1,'https://user_acnt.google.com','subject','a@example.com','active','editor')",
       [user],
     );
     await db.query('INSERT INTO memberships VALUES ($1,1)', [user]);
@@ -224,7 +266,7 @@ test('legacy M1 records and relationships survive physical renaming', async () =
       JOIN doc_artcl e ON e.doc_space_idntfr=sp.doc_space_idntfr AND e.creatr_acnt_idntfr=a.acnt_idntfr
       JOIN doc_artcl parent ON e.up_artcl_idntfr=parent.artcl_idntfr
       JOIN chg_hstry h ON h.trgt_idntfr=e.artcl_idntfr AND h.oprtr_acnt_idntfr=a.acnt_idntfr
-      WHERE e.artcl_idntfr=$1 AND s.ssn_tkn_sha256='digest'`,
+      WHERE e.artcl_idntfr=$1 AND s.ssn_tkn_sha256='digest' AND a.oidc_issuer='https://accounts.google.com'`,
       [file],
     );
     assert.deepEqual(rows, [
