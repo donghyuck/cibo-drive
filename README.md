@@ -102,3 +102,9 @@ AI 에이전트 ─→ MCP 서버 ──┘
 - [Google OpenID Connect](https://developers.google.com/identity/openid-connect/openid-connect)
 - [MCP 인증과 권한 부여](https://modelcontextprotocol.io/specification/latest/basic/authorization)
 
+
+## 데이터베이스 표준화 기준
+
+Cibo Drive는 [행정안전부 「공공기관의 데이터베이스 표준화 지침」](https://www.law.go.kr/LSW/admRulLsInfoP.do?admRulSeq=2100000255382)을 설계 참고 기준으로 사용합니다. 현재 PostgreSQL 물리명과 자료형은 [스키마](apps/api/src/database.ts)에 정의하고, 같은 마이그레이션에서 테이블과 컬럼의 한글 업무 의미를 `COMMENT`로 관리합니다. 예를 들어 `entries.id`는 파일·폴더 식별자이고, `entries.object_key`는 원본 저장소의 객체 키이며 폴더에서는 NULL입니다.
+
+스키마 변경 시 논리명·물리명, 자료형, 키, NULL의 의미, 코드 허용값을 함께 검토합니다. 기관 사업에 적용할 때는 공공데이터 공통표준과 발주기관의 단어·용어·도메인·코드 사전에 대조해 대응 용어와 예외 사유를 기록합니다. 현재 계정 상태와 역할은 프로젝트 코드이며 기관 표준과의 대응은 미확정입니다.
