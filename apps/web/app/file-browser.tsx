@@ -22,7 +22,7 @@ import { FilePreview } from './file-preview';
 import { api, post } from './drive-api';
 
 const maxFileMiB = 30;
-const uploadHint = `파일당 최대 ${maxFileMiB} MiB · PDF, DOCX, TXT, MD`;
+const uploadHint = `파일당 최대 ${maxFileMiB} MiB · PDF, DOCX, TXT, MD, EPUB`;
 
 export type Folder = {
   current: { id: string; name: string; parent_id: string | null };
@@ -277,7 +277,7 @@ export function FileBrowser({
                     ref={picker}
                     type="file"
                     multiple
-                    accept=".pdf,.docx,.txt,.md"
+                    accept=".pdf,.docx,.txt,.md,.epub"
                     aria-label="업로드할 파일"
                     aria-describedby="upload-hint"
                     onChange={(e) => {

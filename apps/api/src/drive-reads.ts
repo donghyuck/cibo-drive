@@ -63,11 +63,11 @@ export async function readText(
   const {
     rows: [row],
   } = await db.query(
-    `SELECT a.artcl_nm AS name,t.prcs_stts_cd AS status,t.fail_rsn AS reason,
-      jsonb_array_length(t.src_sctn_list) AS total,
-      ARRAY(SELECT t.src_sctn_list->i FROM generate_series($3::int,least($3::int+$4::int-1,jsonb_array_length(t.src_sctn_list)-1)) i ORDER BY i) AS segments
-      FROM doc_artcl a JOIN doc_artcl_txt t USING(artcl_idntfr) WHERE a.artcl_idntfr=$1
-      AND a.doc_space_idntfr=$2 AND a.del_grp_idntfr IS NULL`,
+    `SELECT a.artcl_nm AS name,coalesce(t.prcs_stts_cd,'unsupported') AS status,t.fail_rsn AS reason,
+      coalesce(jsonb_array_length(t.src_sctn_list),0) AS total,
+      ARRAY(SELECT t.src_sctn_list->i FROM generate_series($3::int,least($3::int+$4::int-1,coalesce(jsonb_array_length(t.src_sctn_list),0)-1)) i ORDER BY i) AS segments
+      FROM doc_artcl a LEFT JOIN doc_artcl_txt t USING(artcl_idntfr) WHERE a.artcl_idntfr=$1
+      AND a.doc_space_idntfr=$2 AND a.s3_objt_key IS NOT NULL AND a.del_grp_idntfr IS NULL`,
     [id, space, offset, limit],
   );
   if (!row) throw new HttpError(404, '파일을 찾을 수 없습니다.');

@@ -473,6 +473,27 @@ test('team approval, space access and original file lifecycle', async (t) => {
     (await (await request(textUrl, member)).json()).name,
     'Report_100%.md',
   );
+  const epub = await (
+    await import('node:fs/promises')
+  ).readFile(new URL('../fixtures/sample.epub', import.meta.url));
+  const book = await request(
+    'files?' + new URLSearchParams({ parent: child, name: 'sample.EPUB' }),
+    member,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: new Uint8Array(epub),
+    },
+  );
+  assert.equal(book.status, 201);
+  const bookPath = 'files/' + (await book.json()).id;
+  assert.deepEqual(
+    Buffer.from(await (await request(bookPath, member)).arrayBuffer()),
+    epub,
+  );
+  const bookText = await (await request(bookPath + '/text', member)).json();
+  assert.equal(bookText.status, 'unsupported');
+  assert.deepEqual(bookText.segments, []);
   const maxBytes = 30 * 1024 * 1024;
   const exact = await upload('boundary.txt', 'a'.repeat(maxBytes - 1) + 'Z');
   assert.equal(exact.status, 201);

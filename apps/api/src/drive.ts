@@ -219,7 +219,7 @@ export function driveRouter(settings: Settings) {
         'INSERT INTO doc_artcl(doc_space_idntfr,up_artcl_idntfr,artcl_nm,s3_objt_key,creatr_acnt_idntfr,file_sz) VALUES ($1,$2,$3,$4,$5,$6) RETURNING artcl_idntfr AS id',
         [u.space_id, parent, name, key, u.id, size],
       );
-      if (key)
+      if (key && extname(name).toLowerCase() !== '.epub')
         await client.query(
           'INSERT INTO doc_artcl_txt(artcl_idntfr) VALUES ($1)',
           [rows[0].id],
@@ -242,7 +242,7 @@ export function driveRouter(settings: Settings) {
     async (req, res) => {
       const name = nameOf(req.query.name);
       if (
-        !['.pdf', '.docx', '.txt', '.md'].includes(extname(name).toLowerCase())
+        !['.pdf', '.docx', '.txt', '.md', '.epub'].includes(extname(name).toLowerCase())
       )
         throw new HttpError(400, '지원하지 않는 확장자입니다.');
       if (!Buffer.isBuffer(req.body))

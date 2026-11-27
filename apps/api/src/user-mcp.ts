@@ -184,7 +184,7 @@ function userServer({ db, origin, s3, bucket }: Settings, space: number) {
           type: extname(file.name).slice(1).toLowerCase(),
           size: head.ContentLength,
           modified_at: file.modified_at,
-          extraction_status: file.extraction_status,
+          extraction_status: file.extraction_status ?? 'unsupported',
           downloadUrl: new URL('/api/files/' + fileId, origin).href,
         };
       }),

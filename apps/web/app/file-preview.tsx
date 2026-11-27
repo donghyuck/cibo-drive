@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic';
 
 const Markdown = dynamic(() => import('react-markdown'));
 type Preview =
+  | { kind: 'epub' }
   | { kind: 'pdf' }
   | { kind: 'text' | 'markdown'; text: string; truncated: boolean }
   | { kind: 'error'; message: string };
@@ -39,6 +40,10 @@ export function FilePreview({
     const controller = new AbortController();
     const { signal } = controller;
     async function load() {
+      if (ext === 'epub') {
+        setPreview({ kind: 'epub' });
+        return;
+      }
       const pdf = ext === 'pdf';
       const response = await fetch(url, {
         method: pdf ? 'HEAD' : 'GET',
@@ -134,14 +139,16 @@ export function FilePreview({
           </button>
         </div>
       </header>
-      <div className="preview-modes" aria-label="문서 보기 방식">
-        <button aria-pressed={!sources} onClick={() => setSources(false)}>
-          원본 보기
-        </button>
-        <button aria-pressed={sources} onClick={() => setSources(true)}>
-          본문·출처
-        </button>
-      </div>
+      {ext !== 'epub' && (
+        <div className="preview-modes" aria-label="문서 보기 방식">
+          <button aria-pressed={!sources} onClick={() => setSources(false)}>
+            원본 보기
+          </button>
+          <button aria-pressed={sources} onClick={() => setSources(true)}>
+            본문·출처
+          </button>
+        </div>
+      )}
       <div className="preview-body" key={String(sources)}>
         {sources ? (
           <DocumentSources
@@ -156,6 +163,8 @@ export function FilePreview({
           <p role="status">파일을 불러오는 중…</p>
         ) : preview.kind === 'error' ? (
           <p role="alert">{preview.message}</p>
+        ) : preview.kind === 'epub' ? (
+          <p>원본을 다운로드해 EPUB 리더에서 열어보세요.</p>
         ) : preview.kind === 'pdf' ? (
           <object
             type="application/pdf"
