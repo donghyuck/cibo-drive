@@ -10,11 +10,12 @@
     "node": ">=24 <25"
   },
   "scripts": {
-    "dev": "concurrently -k -n web,api \"npm run dev -w @cibo/web\" \"npm run dev -w @cibo/api\"",
+    "dev": "node --env-file-if-exists=.env node_modules/concurrently/dist/bin/concurrently.js -k -n web,api \"npm run dev -w @cibo/web\" \"npm run dev -w @cibo/api\"",
     "typecheck": "npm run typecheck --workspaces",
     "test": "npm test -w @cibo/api",
     "build": "npm run build --workspaces",
-    "infra:check": "node --env-file=.env --import tsx apps/api/src/check-infra.ts"
+    "infra:check": "node --env-file=.env --import tsx apps/api/src/check-infra.ts",
+    "test:drive": "node --env-file-if-exists=.env --import tsx --test apps/api/src/drive.integration.test.ts"
   },
   "devDependencies": {
     "concurrently": "^9.2.1",

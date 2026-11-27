@@ -22,6 +22,16 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+      - name: Start development storage
+        run: |
+          cp .env.example .env
+          docker compose up -d --wait
+          for attempt in {1..20}; do
+            if npm run infra:check; then exit 0; fi
+            sleep 2
+          done
+          exit 1
+      - run: npm run test:drive
       - run: npm run build
         env:
           NEXT_TELEMETRY_DISABLED: 1
