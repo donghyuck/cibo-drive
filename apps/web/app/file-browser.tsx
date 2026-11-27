@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  ArrowDownToLine,
+  Eye,
   ArrowDownAZ,
   ArrowUpZA,
   ChevronRight,
@@ -15,6 +15,7 @@ import {
   Upload,
   X,
 } from 'lucide-react';
+import { FilePreview } from './file-preview';
 import { api, post } from './drive-api';
 
 export type Folder = {
@@ -35,6 +36,9 @@ export function FileBrowser({
 }) {
   const [folder, setFolder] = useState(initial);
   const [trail, setTrail] = useState([initial.current]);
+  const [preview, setPreview] = useState<Folder['entries'][number] | null>(
+    null,
+  );
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState('전체');
   const [descending, setDescending] = useState(false);
@@ -322,7 +326,7 @@ export function FileBrowser({
                     <span className="filename">{item.name}</span>
                     <span className="kind">{type}</span>
                     <span className="row-action">
-                      {item.folder ? <ChevronRight /> : <ArrowDownToLine />}
+                      {item.folder ? <ChevronRight /> : <Eye />}
                     </span>
                   </>
                 );
@@ -333,13 +337,12 @@ export function FileBrowser({
                         {inside}
                       </button>
                     ) : (
-                      <a
-                        aria-label={item.name + ' 다운로드'}
-                        href={'/api/files/' + item.id}
-                        download
+                      <button
+                        aria-label={item.name + ' 미리보기'}
+                        onClick={() => setPreview(item)}
                       >
                         {inside}
-                      </a>
+                      </button>
                     )}
                   </li>
                 );
@@ -383,6 +386,13 @@ export function FileBrowser({
           </div>
         )}
       </div>
+      {preview && (
+        <FilePreview
+          key={preview.id}
+          file={preview}
+          close={() => setPreview(null)}
+        />
+      )}
       {dragging && (
         <div className="drop">
           <Upload />

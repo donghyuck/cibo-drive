@@ -9,6 +9,7 @@ import {
   DeleteObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
+import { PreviewCache, byteRange, readSlice } from './preview-cache.js';
 import { pipeline } from 'node:stream/promises';
 import type { Readable } from 'node:stream';
 
@@ -100,15 +101,14 @@ export function driveRouter(settings: Settings) {
   };
   router.use((req, res, next) => {
     res.set('Cache-Control', 'private, no-store');
-    if (req.method !== 'GET' && req.headers.origin !== origin)
+    if (!['GET', 'HEAD'].includes(req.method) && req.headers.origin !== origin)
       return res.sendStatus(403);
     next();
   });
   router.use(express.json({ limit: '16kb' }));
   router.get('/config', (_req, res) => res.json({ clientId }));
   router.post('/login', async (req, res) => {
-    if (!clientId)
-      throw new HttpError(503, 'Google 로그인 설정이 필요합니다.');
+    if (!clientId) throw new HttpError(503, 'Google 로그인 설정이 필요합니다.');
     if (typeof req.body?.credential !== 'string')
       throw new HttpError(400, '인증 정보가 필요합니다.');
     const identity = await settings.verify(req.body.credential).catch(() => {
@@ -221,7 +221,7 @@ export function driveRouter(settings: Settings) {
     if (
       u.status !== 'active' ||
       !u.space_id ||
-      (req.method !== 'GET' && u.role === 'viewer')
+      (!['GET', 'HEAD'].includes(req.method) && u.role === 'viewer')
     )
       throw new HttpError(403, '문서 공간 권한이 필요합니다.');
     next();
@@ -297,21 +297,82 @@ export function driveRouter(settings: Settings) {
       }
     },
   );
-  router.get('/files/:id', async (req, res) => {
+  const previews = new PreviewCache();
+  async function findFile(id: string, space: number) {
     const { rows } = await db.query(
       'SELECT s3_objt_key AS object_key,artcl_nm AS name FROM doc_artcl WHERE artcl_idntfr=$1 AND doc_space_idntfr=$2 AND s3_objt_key IS NOT NULL',
-      [req.params.id, res.locals.user.space_id],
+      [id, space],
     );
     if (!rows.length) throw new HttpError(404, '파일을 찾을 수 없습니다.');
+    return rows[0] as { object_key: string; name: string };
+  }
+  async function original(key: string) {
     const object = await s3.send(
-      new GetObjectCommand({ Bucket: bucket, Key: rows[0].object_key }),
+      new GetObjectCommand({ Bucket: bucket, Key: key }),
     );
     if (!object.Body) throw new HttpError(502, '원본을 읽을 수 없습니다.');
+    return object.Body as Readable;
+  }
+  router.get('/files/:id', async (req, res) => {
+    const file = await findFile(req.params.id, res.locals.user.space_id);
+    const stream = await original(file.object_key);
     res
-      .attachment(rows[0].name)
+      .attachment(file.name)
       .type('application/octet-stream')
       .set('X-Content-Type-Options', 'nosniff');
-    await pipeline(object.Body as Readable, res);
+    await pipeline(stream, res);
+  });
+  router.get('/files/:id/preview', async (req, res) => {
+    const file = await findFile(req.params.id, res.locals.user.space_id);
+    const ext = extname(file.name).toLowerCase();
+    if (!['.pdf', '.md', '.txt', '.docx'].includes(ext))
+      throw new HttpError(415, '미리보기를 지원하지 않는 형식입니다.');
+    const cached = await previews.acquire(file.object_key, () =>
+      original(file.object_key),
+    );
+    try {
+      if (ext === '.pdf') {
+        const header = Buffer.alloc(5);
+        await cached.handle.read(header, 0, 5, 0);
+        if (header.toString() !== '%PDF-')
+          throw new HttpError(422, 'PDF 파일을 읽을 수 없습니다.');
+      }
+      const range = req.headers.range
+        ? byteRange(req.headers.range, cached.size)
+        : undefined;
+      res.set({
+        'Accept-Ranges': 'bytes',
+        'X-Content-Type-Options': 'nosniff',
+        'X-Frame-Options': 'SAMEORIGIN',
+        'Content-Security-Policy':
+          "default-src 'none'; frame-ancestors 'self'; base-uri 'none'",
+      });
+      if (range === null) {
+        res
+          .set('Content-Range', 'bytes */' + cached.size)
+          .status(416)
+          .end();
+        return;
+      }
+      // Only validated PDFs are displayed as native documents. Other formats
+      // are fetched by the viewer and rendered as text.
+      res.type(ext === '.pdf' ? 'application/pdf' : 'application/octet-stream');
+      res.set('Content-Disposition', ext === '.pdf' ? 'inline' : 'attachment');
+      const start = range?.start ?? 0,
+        end = range?.end ?? cached.size - 1;
+      if (range)
+        res
+          .status(206)
+          .set('Content-Range', `bytes ${start}-${end}/${cached.size}`);
+      res.set('Content-Length', String(end - start + 1));
+      if (req.method === 'HEAD' || !cached.size) {
+        res.end();
+        return;
+      }
+      await pipeline(readSlice(cached.handle, start, end), res);
+    } finally {
+      cached.release();
+    }
   });
   router.use(((error, req, res, next) => {
     if (res.headersSent) return next(error);
@@ -322,11 +383,13 @@ export function driveRouter(settings: Settings) {
           ? 409
           : error.code === '22P02'
             ? 400
-            : error.status === 413
-              ? 413
-              : error.status === 400
-                ? 400
-                : 500;
+            : error.status === 503
+              ? 503
+              : error.status === 413
+                ? 413
+                : error.status === 400
+                  ? 400
+                  : 500;
     res.status(status).json({
       error:
         error instanceof HttpError
