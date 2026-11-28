@@ -2,6 +2,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import assert from 'node:assert/strict';
 import { extractNext, thumbnailNext } from './document-text.js';
+import { rebuildPassages } from './passages.js';
 import { Readable } from 'node:stream';
 import { once } from 'node:events';
 import { randomUUID } from 'node:crypto';
@@ -265,6 +266,33 @@ test('team approval, space access and original file lifecycle', async (t) => {
   assert.deepEqual(firstText.segments, [
     { unit: 'line', start: 1, end: 1, text: '첫 문서' },
   ]);
+  const passages = async () =>
+    (
+      await db.query(
+        'SELECT srch_sctn_list FROM doc_artcl_txt WHERE artcl_idntfr=$1',
+        [id],
+      )
+    ).rows[0].srch_sctn_list;
+  const expectedPassages = [
+    { ...firstText.segments[0], segment: 0, offset: 0 },
+  ];
+  assert.deepEqual(await passages(), expectedPassages);
+  // Old extracted rows start with NULL after migration.
+  await db.query(
+    'UPDATE doc_artcl_txt SET srch_sctn_list=NULL WHERE artcl_idntfr=$1',
+    [id],
+  );
+  assert.deepEqual(
+    (await Promise.all([rebuildPassages(db), rebuildPassages(db)])).sort(),
+    [false, true],
+  );
+  assert.deepEqual(await passages(), expectedPassages);
+  await db.query(
+    "UPDATE doc_artcl_txt SET srch_sctn_list='[{},{}]' WHERE artcl_idntfr=$1",
+    [id],
+  );
+  assert.equal(await rebuildPassages(db, id), true);
+  assert.deepEqual(await passages(), expectedPassages);
   assert.equal((await upload('회의록.md', '다른 내용')).status, 409);
   const entries = (await (await request('folder?id=' + child, member)).json())
     .entries;
