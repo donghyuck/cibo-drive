@@ -15,7 +15,8 @@
     "test": "npm test -w @cibo/api",
     "build": "npm run build --workspaces",
     "infra:check": "node --env-file=.env --import tsx apps/api/src/check-infra.ts",
-    "test:drive": "node --env-file-if-exists=.env --import tsx --test apps/api/src/drive.integration.test.ts"
+    "test:drive": "node --env-file-if-exists=.env --import tsx --test apps/api/src/drive.integration.test.ts",
+    "test:acceptance": "node --env-file-if-exists=.env --import tsx --test apps/api/src/web-mcp.acceptance.test.ts"
   },
   "devDependencies": {
     "concurrently": "^9.2.1",

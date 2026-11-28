@@ -43,7 +43,6 @@ function AccountForm({
   save: (a: Account) => Promise<void>;
 }) {
   const [a, set] = useState(account);
-  useEffect(() => set(account), [account]);
   return (
     <form
       onSubmit={(e) => {
@@ -201,7 +200,14 @@ export default function Drive() {
             <h1>계정 관리</h1>
             {accounts.map((a) => (
               <AccountForm
-                key={a.id}
+                key={JSON.stringify([
+                  a.id,
+                  a.email,
+                  a.status,
+                  a.role,
+                  a.space_id,
+                  a.master,
+                ])}
                 account={a}
                 save={(next) =>
                   act(async () => {

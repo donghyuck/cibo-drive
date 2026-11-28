@@ -37,3 +37,5 @@ jobs:
       - run: npm run build
         env:
           NEXT_TELEMETRY_DISABLED: 1
+          CIBO_STATIC_EXPORT: 'true'
+      - run: npm run test:acceptance

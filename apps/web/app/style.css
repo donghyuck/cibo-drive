@@ -1447,3 +1447,31 @@ dialog.lookup {
   margin: 0;
   overflow-wrap: anywhere;
 }
+
+.item-menu {
+  display: inline-flex;
+  align-items: center;
+}
+.item-menu .quick-move {
+  font-size: 12px;
+  gap: 3px;
+}
+.grid .manageable:has(.quick-move) > button {
+  padding-bottom: 46px;
+}
+@media (min-width: 761px) {
+  .list-head:has(+ .items .quick-move) {
+    grid-template-columns: minmax(0, 1fr) 58px 80px 110px 98px;
+  }
+  .items:not(.grid):has(.quick-move) li > button {
+    grid-template-columns: 38px minmax(0, 1fr) 58px 80px 110px 98px;
+  }
+}
+@media (max-width: 760px) {
+  .items:not(.grid) .quick-move span {
+    display: none;
+  }
+  .items:not(.grid) li:has(.quick-move) > button {
+    grid-template-columns: 32px minmax(0, 1fr) 72px;
+  }
+}
