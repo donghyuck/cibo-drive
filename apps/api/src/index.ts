@@ -1,3 +1,4 @@
+import { embeddingProvider, startIndexing } from './embeddings.js';
 import { fillMissingFileSizes } from './file-sizes.js';
 import pg from 'pg';
 import { startExtraction } from './document-text.js';
@@ -39,6 +40,8 @@ if (process.env.DATABASE_URL) {
   void fillMissingFileSizes(db, s3, env.S3_BUCKET).catch(() =>
     console.warn('File size backfill unavailable'),
   );
+  const provider = embeddingProvider(env);
+  if (provider) startIndexing(db, provider);
   startExtraction(db, async (key) => {
     const response = await s3.send(
       new GetObjectCommand({ Bucket: env.S3_BUCKET, Key: key }),

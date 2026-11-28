@@ -30,6 +30,10 @@ services:
     environment:
       NODE_ENV: production
       NODE_OPTIONS: --max-old-space-size=112
+      CIBO_EMBED_MODEL: ${CIBO_EMBED_MODEL:-}
+      CIBO_EMBED_URL: ${CIBO_EMBED_URL:-}
+      CIBO_EMBED_API_KEY: ${CIBO_EMBED_API_KEY:-}
+      CIBO_EMBED_DIMENSIONS: ${CIBO_EMBED_DIMENSIONS:-1536}
       CIBO_API_HOST: 0.0.0.0
       CIBO_WEB_ORIGIN: https://${SITE_DOMAIN:?Set SITE_DOMAIN}
       DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL}

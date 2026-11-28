@@ -106,6 +106,20 @@ export async function migrate(db: pg.Pool) {
         ),
       );
     }
+    if (
+      !(
+        await client.query(
+          "SELECT to_regclass(current_schema() || '.doc_sctn_idx') AS name",
+        )
+      ).rows[0].name
+    ) {
+      await client.query(
+        await readFile(
+          new URL('../migrations/009-passage-embeddings.sql', import.meta.url),
+          'utf8',
+        ),
+      );
+    }
     // Preserve account IDs, memberships and history from earlier M1 builds.
     await client.query(`UPDATE user_acnt SET oidc_issuer='https://accounts.google.com'
       WHERE oidc_issuer='https://user_acnt.google.com'`);

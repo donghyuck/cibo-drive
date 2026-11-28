@@ -149,6 +149,21 @@ API는 신규 문서의 추출 결과와 검색 문단을 함께 저장합니다
 
 운영자는 마이그레이션된 DB에서 `npm run passages:rebuild -- <파일 UUID>`로 한 파일의 검색 문단을 다시 생성할 수 있습니다. 명령은 `DATABASE_URL`의 추출 완료 파일을 대상으로 현재 문단 목록 전체를 한 트랜잭션에서 교체합니다.
 
+### 문단 임베딩과 자동 색인
+
+1GB VM에서는 API가 최대 8개 문단씩 외부 모델 서버에 보내고 벡터는 기존 PostgreSQL에 저장합니다. 서버 환경에 다음 값을 설정한 뒤 API를 재시작하면 기존 문서와 새 업로드를 자동 처리합니다. 모델명을 비워 두면 색인 작업자는 시작하지 않습니다.
+
+```dotenv
+CIBO_EMBED_MODEL=text-embedding-3-small
+CIBO_EMBED_URL=https://api.openai.com/v1/embeddings
+CIBO_EMBED_DIMENSIONS=1536
+CIBO_EMBED_API_KEY=
+```
+
+`CIBO_EMBED_API_KEY`에는 사용할 조직의 서버 전용 프로젝트 키를 설정합니다. 사설 KURE 서버도 OpenAI 호환 `/v1/embeddings` 주소, 서버가 반환하는 모델명, 출력 차원(1024)으로 설정할 수 있습니다. 이때 키는 서버 인증 설정을 따릅니다. 차원은 응답을 검증하는 값입니다. 모든 API 인스턴스는 동일한 모델 설정을 사용하고, 자체 호스팅 모델의 가중치를 변경할 때는 버전을 구분하는 모델명으로 배포합니다.
+
+`npm run embeddings -- failed`로 실패한 파일 ID와 원인을 확인하고 `npm run embeddings -- retry <파일 UUID>`로 해당 파일만 재시도합니다. 완료된 배치부터 이어서 처리합니다. 문단이 바뀌면 이전 벡터를 비우고 처음부터 생성합니다. 파일 전체가 완료돼야 `idx_stts_cd=ready`가 됩니다. 검색에서는 현재 모델 식별자, 완료 상태, 최신 파일 권한을 함께 검사해야 합니다.
+
 ## 참고
 
 - [Google OpenID Connect](https://developers.google.com/identity/openid-connect/openid-connect)
@@ -157,4 +172,4 @@ API는 신규 문서의 추출 결과와 검색 문단을 함께 저장합니다
 
 ## 데이터베이스 표준화 기준
 
-[공공데이터 표준 물리명 대조표](docs/database-names.md)에 8개 테이블과 43개 컬럼의 기존 이름, 적용 이름, 표준용어·단어 및 프로젝트 용어를 기록합니다. [SQL 마이그레이션](apps/api/migrations)은 기존 DB에서 데이터를 유지한 채 이름을 변경합니다. 스키마 변경 시 논리명·물리명, 자료형, 키, NULL의 의미, 코드 허용값을 함께 검토합니다. 기관 적용 시에는 [공공기관의 데이터베이스 표준화 지침](https://www.law.go.kr/LSW/admRulLsInfoP.do?admRulSeq=2100000255382)과 해당 기관 표준사전을 기준으로 도메인 및 코드 대응을 확인합니다.
+[공공데이터 표준 물리명 대조표](docs/database-names.md)에 9개 테이블과 49개 컬럼의 기존 이름, 적용 이름, 표준용어·단어 및 프로젝트 용어를 기록합니다. [SQL 마이그레이션](apps/api/migrations)은 기존 DB에서 데이터를 유지한 채 이름을 변경합니다. 스키마 변경 시 논리명·물리명, 자료형, 키, NULL의 의미, 코드 허용값을 함께 검토합니다. 기관 적용 시에는 [공공기관의 데이터베이스 표준화 지침](https://www.law.go.kr/LSW/admRulLsInfoP.do?admRulSeq=2100000255382)과 해당 기관 표준사전을 기준으로 도메인 및 코드 대응을 확인합니다.
