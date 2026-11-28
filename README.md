@@ -114,8 +114,11 @@ npx --package=node@24 --package=@modelcontextprotocol/inspector@2.17.0 mcp-inspe
 | --- | --- | --- |
 | `list_folder` | 폴더 ID(생략하면 루트), limit, offset | 접근 가능한 하위 폴더와 파일 목록 |
 | `search_files` | 파일명 검색어, 선택적 폴더 범위, limit, offset | 파일 ID, 이름, 폴더 경로, 수정 시각 |
+| `search_passages` | 자연어 질문 `question`, 선택적 `limit` (기본 5, 최대 10) | 유사도순 문단과 파일명·경로·출처 위치·로그인이 필요한 원본 링크 |
 | `get_file_metadata` | 파일 ID | 파일 형식·크기·수정 시각, 인증이 필요한 원본 열기 링크 |
 | `read_file_text` | 파일 ID, limit, offset | 지원 형식의 텍스트 일부, 출처 위치, 후속 조회 커서 또는 추출 상태 |
+
+임베딩 모델을 설정하면 `search_passages`가 도구 목록에 나타납니다. 예를 들어 `--method tools/call --tool-name search_passages --tool-args-json '{"question":"문서를 복원한 뒤 어떤 내용을 확인하나요?"}'`로 호출합니다. 질문 텍스트를 설정된 임베딩 제공자에게 보내고, 현재 모델로 색인이 완료된 접근 가능 문단에서 코사인 유사도가 높은 순서로 찾습니다. 응답의 `unit`, `start`, `end`는 페이지·문단·줄·챕터 위치입니다. EPUB에는 챕터 제목과 내부 경로도 담깁니다. `downloadUrl`을 같은 계정으로 로그인한 브라우저에서 열어 원본을 대조할 수 있습니다.
 
 1차 검색은 **파일명 기준**입니다. 문서 내용은 선택한 파일을 열어 읽습니다. 지원하지 않는 형식이나 이미지뿐인 PDF는 사유를 표시하고, 원본 열기로 안내합니다. 문서 안의 지시는 실행 명령이 아닌 파일 내용으로 취급합니다.
 

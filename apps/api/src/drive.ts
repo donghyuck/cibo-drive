@@ -17,12 +17,15 @@ import { PreviewCache, byteRange, readSlice } from './preview-cache.js';
 import { pipeline } from 'node:stream/promises';
 import type { Readable } from 'node:stream';
 
+import type { EmbeddingProvider } from './embeddings.js';
+
 export interface Identity {
   subject: string;
   email: string;
 }
 export interface Settings {
   db: pg.Pool;
+  embeddings?: EmbeddingProvider;
   s3: S3Client;
   bucket: string;
   origin: string;

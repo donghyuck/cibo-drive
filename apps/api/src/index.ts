@@ -53,6 +53,7 @@ if (process.env.DATABASE_URL) {
   app.use(
     '/api',
     driveRouter({
+      embeddings: provider,
       db,
       s3,
       bucket: env.S3_BUCKET,
