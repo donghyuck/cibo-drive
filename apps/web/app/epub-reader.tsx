@@ -1,3 +1,4 @@
+import { BookOpen, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api, post } from './drive-api';
 
@@ -28,6 +29,23 @@ export function EpubReader({
   const [text, setText] = useState<string | null>(null),
     [error, setError] = useState(''),
     [attempt, setAttempt] = useState(0);
+  const [fontSize, setFontSize] = useState(20);
+  useEffect(() => {
+    try {
+      const saved = Number(localStorage.getItem('cibo.reader.fontSize'));
+      if ([16, 18, 20, 22, 24, 26].includes(saved)) setFontSize(saved);
+    } catch {
+      // The reader also works when browser storage is unavailable.
+    }
+  }, []);
+  function resize(size: number) {
+    setFontSize(size);
+    try {
+      localStorage.setItem('cibo.reader.fontSize', String(size));
+    } catch {
+      // Keep the setting for this session.
+    }
+  }
   const chapter = book?.chapters[index];
   useEffect(() => {
     const c = new AbortController();
@@ -106,9 +124,9 @@ export function EpubReader({
     );
   return (
     <section className="ebook">
-      <nav aria-label="전자책 목차">
+      <div className="ebook-controls">
         <label>
-          목차
+          <BookOpen size={17} aria-hidden="true" /> 목차
           <select value={index} onChange={(e) => go(Number(e.target.value))}>
             {book.chapters.map((ch, i) => (
               <option key={ch.number} value={i}>
@@ -117,6 +135,41 @@ export function EpubReader({
             ))}
           </select>
         </label>
+        <div className="ebook-size" role="group" aria-label="본문 글자 크기">
+          <button
+            aria-label="글자 작게"
+            disabled={fontSize <= 16}
+            onClick={() => resize(fontSize - 2)}
+          >
+            가−
+          </button>
+          <button
+            aria-label="글자 크게"
+            disabled={fontSize >= 26}
+            onClick={() => resize(fontSize + 2)}
+          >
+            가＋
+          </button>
+        </div>
+      </div>
+      <div
+        className="ebook-scroll"
+        key={index + '-' + page}
+        tabIndex={0}
+        role="region"
+        aria-label="책 본문"
+      >
+        <article className="ebook-page" style={{ fontSize }}>
+          <small>제 {chapter.number} 장</small>
+          <h3>{chapter.title}</h3>
+          {text === null ? (
+            <p role="status">불러오는 중…</p>
+          ) : (
+            <div className="ebook-prose">{text}</div>
+          )}
+        </article>
+      </div>
+      <nav className="ebook-turn" aria-label="전자책 본문 이동">
         <button
           disabled={index === 0 && page === 0}
           onClick={() =>
@@ -128,8 +181,13 @@ export function EpubReader({
                 )
           }
         >
-          이전
+          <ChevronLeft size={16} aria-hidden="true" /> 이전
         </button>
+        <span role="status">
+          {index + 1} / {book.chapters.length}장
+          {chapter.count > 10 &&
+            ` · 구간 ${page + 1} / ${Math.ceil(chapter.count / 10)}`}
+        </span>
         <button
           disabled={
             index === book.chapters.length - 1 &&
@@ -141,16 +199,9 @@ export function EpubReader({
               : go(index + 1)
           }
         >
-          다음
+          다음 <ChevronRight size={16} aria-hidden="true" />
         </button>
       </nav>
-      <article className="preview-paper" key={index + '-' + page}>
-        <small>
-          {chapter.number}장 / {book.chapters.length}장
-        </small>
-        <h3>{chapter.title}</h3>
-        {text === null ? <p role="status">불러오는 중…</p> : <pre>{text}</pre>}
-      </article>
     </section>
   );
 }
