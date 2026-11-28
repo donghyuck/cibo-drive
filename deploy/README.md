@@ -113,6 +113,8 @@ docker compose -f compose.yml exec -T api node apps/api/dist/check-infra.js
 
 `docker stats --no-stream`, `free -h`, `df -h`로 첫 업로드 전후를 비교한다. API는 업로드 본문을 메모리에 보관하므로 여러 30 MiB 파일이 동시에 들어오면 메모리 사용량이 증가한다. 컨테이너가 재시작되면 `docker inspect --format '{{.State.OOMKilled}} {{.RestartCount}}' "$(docker compose -f compose.yml ps -q api)"`와 해당 서비스 로그를 확인한다. 반복적으로 메모리가 부족하면 동시 사용량을 줄이거나 메모리 증설 후 상한을 조정한다. 가용 디스크와 동시 사용자 수를 확인한 후 팀 문서를 옮긴다.
 
+기존 PostgreSQL·OCI 원본의 전체 복원 연습과 검증 결과는 [복구 가이드](recovery.md)에 있습니다.
+
 업데이트 전 쓰기를 멈추려면 앱 서버에서 `docker compose -f compose.yml stop web api objects`를 실행한다. DB 서버에서 전용 DB의 `pg_dump -Fc` 백업을 만들고, 같은 시점의 SeaweedFS 데이터 디렉터리 전체를 백업한다. 자격증명과 Caddy 인증서 볼륨도 별도로 보호한다. 사본은 서버 밖에 보관하고 별도 환경에서 DB와 원본을 함께 복원해 파일 다운로드를 확인한다.
 
 새 버전은 3단계에서 새 태그로 빌드해 전송한 뒤 서버에서 `docker load`하고, 기존 `.env`의 이미지 태그만 바꿔 4단계의 기동·검증 명령을 실행한다. DB 마이그레이션이 있는 버전을 되돌릴 때는 구버전과 호환되는 DB·원본 백업 시점을 맞춘다.
