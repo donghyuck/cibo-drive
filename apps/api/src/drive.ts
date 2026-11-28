@@ -1,3 +1,4 @@
+import { oauthProtocolRoutes, oauthConsentRoutes } from './mcp-oauth.js';
 import { HttpError, nameOf, transaction, lockSpace } from './drive-db.js';
 import { listFolder, folder, readText, bookContents } from './drive-reads.js';
 import { searchPassages } from './evidence-search.js';
@@ -64,6 +65,7 @@ function hash(token: string) {
 export function driveRouter(settings: Settings) {
   const { db, origin, masterSubject, clientId, s3, bucket } = settings;
   const router = express.Router();
+  router.use('/oauth', oauthProtocolRoutes(settings));
   router.use('/mcp', mcpEndpoint(settings));
   const cookie = {
     httpOnly: true,
@@ -129,6 +131,7 @@ export function driveRouter(settings: Settings) {
     res.locals.user = rows[0];
     next();
   });
+  router.use('/oauth', oauthConsentRoutes(settings));
   router.use('/mcp-tokens', tokenRoutes(db));
   router.get('/me', (_req, res) => res.json(res.locals.user));
   router.use('/admin', (req, res, next) => {

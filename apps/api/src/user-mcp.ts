@@ -1,3 +1,4 @@
+import { accessDigest, oauthChallenge } from './mcp-oauth.js';
 import { searchPassages, tokenAccess, previewLink } from './evidence-search.js';
 import express from 'express';
 import { createHash, randomBytes } from 'node:crypto';
@@ -20,14 +21,14 @@ import type { Settings } from './drive.js';
 const digest = (value: string) =>
   createHash('sha256').update(value).digest('hex');
 const tokenFields =
-  'tkn_idntfr AS id,tkn_nm AS name,reg_dt AS issued_at,expry_dt AS expires_at';
+  'tkn_idntfr AS id,tkn_nm AS name,reg_dt AS issued_at,coalesce(rfrsh_expry_dt,expry_dt) AS expires_at, oauth_rsrc_url IS NOT NULL AS oauth';
 
 // Mounted after web session authentication and the browser origin check.
 export function tokenRoutes(db: pg.Pool) {
   const r = express.Router();
   r.get('/', async (_req, res) => {
     const result = await db.query(
-      `SELECT ${tokenFields} FROM mcp_acs_tkn WHERE acnt_idntfr=$1 AND expry_dt>now() ORDER BY reg_dt DESC`,
+      `SELECT ${tokenFields} FROM mcp_acs_tkn WHERE acnt_idntfr=$1 AND pkce_challenge IS NULL AND coalesce(rfrsh_expry_dt,expry_dt)>now() ORDER BY reg_dt DESC`,
       [res.locals.user.id],
     );
     res.json(result.rows);
@@ -46,7 +47,7 @@ export function tokenRoutes(db: pg.Pool) {
         [user.id],
       );
       await client.query(
-        'DELETE FROM mcp_acs_tkn WHERE acnt_idntfr=$1 AND expry_dt<=now()',
+        'DELETE FROM mcp_acs_tkn WHERE acnt_idntfr=$1 AND coalesce(rfrsh_expry_dt,expry_dt)<=now()',
         [user.id],
       );
       const {
@@ -388,16 +389,16 @@ export function mcpEndpoint(settings: Settings) {
       req.headers.origin !== settings.origin
     )
       return res.sendStatus(403);
-    const match = /^Bearer (cibo_mcp_[A-Za-z0-9_-]{43})$/i.exec(
+    const match = /^Bearer (cibo_(?:mcp|oauth)_[A-Za-z0-9_-]{43})$/i.exec(
       req.headers.authorization ?? '',
     );
-    const tokenHash = match ? digest(match[1]) : null;
+    const tokenHash = match ? accessDigest(match[1], settings.origin) : null;
     const row = tokenHash
       ? (await settings.db.query(tokenAccess('$1'), [tokenHash])).rows[0]
       : null;
     if (!row)
       return res
-        .set('WWW-Authenticate', 'Bearer realm="cibo-drive"')
+        .set('WWW-Authenticate', oauthChallenge(settings.origin))
         .sendStatus(401);
     if (row.status !== 'active' || !row.member) return res.sendStatus(403);
     if (req.method !== 'POST') return res.set('Allow', 'POST').sendStatus(405);

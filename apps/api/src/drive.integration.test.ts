@@ -6,7 +6,7 @@ import { embeddingProvider, indexNext, retryIndex } from './embeddings.js';
 import { rebuildPassages } from './passages.js';
 import { Readable } from 'node:stream';
 import { once } from 'node:events';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
 import { test } from 'node:test';
 import pg from 'pg';
@@ -163,6 +163,90 @@ test('team approval, space access and original file lifecycle', async (t) => {
       204,
     );
   await grant('active', 'editor', true);
+  const verifier = 'a'.repeat(64);
+  const authorization = {
+    client_id: 'cibo-codex',
+    response_type: 'code',
+    redirect_uri: 'http://127.0.0.1:49233/callback/fwqfvb1UgHvX',
+    state: 'test-state',
+    code_challenge: createHash('sha256').update(verifier).digest('base64url'),
+    code_challenge_method: 'S256',
+    scope: 'documents:read',
+    resource: origin + '/api/mcp',
+  };
+  const approve = (extra = {}) =>
+    post('oauth/approve', member, {
+      ...authorization,
+      approve: true,
+      ...extra,
+    });
+  const consent = await approve();
+  assert.equal(consent.status, 200);
+  const redirect = new URL((await consent.json()).redirect);
+  assert.equal(redirect.searchParams.get('state'), authorization.state);
+  const redeem = (extra: Record<string, string> = {}) =>
+    request('oauth/token', '', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: authorization.client_id,
+        resource: authorization.resource,
+        grant_type: 'authorization_code',
+        code: redirect.searchParams.get('code')!,
+        redirect_uri: authorization.redirect_uri,
+        code_verifier: verifier,
+        ...extra,
+      }),
+    });
+  assert.equal((await redeem({ code_verifier: 'b'.repeat(64) })).status, 400);
+  assert.equal(
+    (
+      await redeem({
+        redirect_uri: 'http://127.0.0.1:49234/callback/fwqfvb1UgHvX',
+      })
+    ).status,
+    400,
+  );
+  assert.equal(
+    (await approve({ redirect_uri: 'https://outside.example/callback' }))
+      .status,
+    400,
+  );
+  const redeemed = await redeem();
+  assert.equal(redeemed.status, 200);
+  const oauth = await redeemed.json();
+  assert.equal((await redeem()).status, 400);
+  const oauthConnection = (await (await request('mcp-tokens', member)).json()).find(
+    (row: { oauth: boolean }) => row.oauth,
+  );
+  assert.ok(oauthConnection);
+  const oauthStatus = (token: string) =>
+    request('mcp', '', { headers: { Authorization: 'Bearer ' + token } });
+  assert.equal((await oauthStatus(oauth.access_token)).status, 405);
+  await db.query(
+    "UPDATE mcp_acs_tkn SET expry_dt=now()-interval '1 second' WHERE tkn_idntfr=$1",
+    [oauthConnection.id],
+  );
+  assert.equal((await oauthStatus(oauth.access_token)).status, 401);
+  const refresh = (token: string) =>
+    redeem({ grant_type: 'refresh_token', refresh_token: token });
+  const renewed = await refresh(oauth.refresh_token);
+  assert.equal(renewed.status, 200);
+  const rotated = await renewed.json();
+  assert.notEqual(rotated.refresh_token, oauth.refresh_token);
+  assert.equal((await refresh(oauth.refresh_token)).status, 400);
+  assert.equal((await oauthStatus(rotated.access_token)).status, 405);
+  await grant('active', 'editor', false);
+  assert.equal((await oauthStatus(rotated.access_token)).status, 403);
+  assert.equal((await refresh(rotated.refresh_token)).status, 400);
+  await grant('active', 'editor', true);
+  assert.equal(
+    (await request('mcp-tokens/' + oauthConnection.id, member, { method: 'DELETE' }))
+      .status,
+    204,
+  );
+  assert.equal((await oauthStatus(rotated.access_token)).status, 401);
+  assert.equal((await refresh(rotated.refresh_token)).status, 400);
   const issue = await post('mcp-tokens', member, {
     name: 'Integration client',
   });

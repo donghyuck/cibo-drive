@@ -120,6 +120,16 @@ export async function migrate(db: pg.Pool) {
         ),
       );
     }
+    const oauth = await client.query(
+      "SELECT 1 FROM pg_attribute WHERE attrelid='mcp_acs_tkn'::regclass AND attname='oauth_rsrc_url' AND NOT attisdropped",
+    );
+    if (!oauth.rowCount)
+      await client.query(
+        await readFile(
+          new URL('../migrations/010-mcp-oauth.sql', import.meta.url),
+          'utf8',
+        ),
+      );
     // Preserve account IDs, memberships and history from earlier M1 builds.
     await client.query(`UPDATE user_acnt SET oidc_issuer='https://accounts.google.com'
       WHERE oidc_issuer='https://user_acnt.google.com'`);

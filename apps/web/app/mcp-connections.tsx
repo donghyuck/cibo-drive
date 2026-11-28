@@ -1,7 +1,12 @@
 import { useEffect, useState } from 'react';
 import { api, post } from './drive-api';
 
-type Connection = { id: string; name: string; expires_at: string };
+type Connection = {
+  id: string;
+  name: string;
+  expires_at: string;
+  oauth?: boolean;
+};
 export function McpConnections({ canIssue }: { canIssue: boolean }) {
   const [connections, setConnections] = useState<Connection[]>([]);
   const [name, setName] = useState(''),
@@ -37,6 +42,18 @@ export function McpConnections({ canIssue }: { canIssue: boolean }) {
         MCP를 지원하는 앱에서 내 문서 공간을 검색하고 파일 본문과 출처를 읽을 수
         있습니다.
       </p>
+      <details open>
+        <summary>Codex에서 브라우저로 연결하기</summary>
+        <pre>
+          {endpoint &&
+            `codex mcp add cibo-drive-oauth --url '${endpoint}' --oauth-client-id cibo-codex`}
+        </pre>
+        <p>
+          Codex가 연 브라우저에서 로그인하고 읽기 권한을 승인하세요. 연결은
+          사용할 때 자동 갱신되며, 90일 동안 갱신하지 않으면 다시 로그인해야
+          합니다.
+        </p>
+      </details>
       <ol className="mcp-steps">
         <li>
           <h2>연결 이름을 정하고 토큰을 발급하세요</h2>
@@ -204,7 +221,8 @@ export function McpConnections({ canIssue }: { canIssue: boolean }) {
             <div>
               <strong>{c.name}</strong>
               <small>
-                {new Date(c.expires_at).toLocaleDateString('ko-KR')} 만료
+                {new Date(c.expires_at).toLocaleDateString('ko-KR')}{' '}
+                {c.oauth ? '미사용 시 만료' : '만료'}
               </small>
             </div>
             <button
