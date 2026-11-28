@@ -160,7 +160,7 @@ export function FilePreview({
       <div className="preview-body" key={String(sources)}>
         {sources ? (
           <DocumentSources
-            initialOffset={source?.segment}
+            source={source}
             fileId={file.id}
             writable={writable}
             openPage={(n) => {

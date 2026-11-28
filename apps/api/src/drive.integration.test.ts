@@ -208,6 +208,7 @@ test('team approval, space access and original file lifecycle', async (t) => {
   );
   t.after(() => client.close());
   assert.deepEqual((await client.listTools()).tools.map((t) => t.name).sort(), [
+    'connection_status',
     'get_file_metadata',
     'list_folder',
     'read_file_text',
@@ -324,6 +325,10 @@ test('team approval, space access and original file lifecycle', async (t) => {
   const evidence = async () =>
     (await readTool('search_passages', { question: '어떤 기록이 남았나요?' }))
       .results;
+  const connection = await readTool('connection_status');
+  assert.equal(connection.authenticated, true);
+  assert.equal(connection.readyFiles, 1);
+  assert.equal(connection.searchStatus, 'ready');
   const [hit] = await evidence();
   assert.equal(hit.fileId, id);
   assert.equal(hit.name, '회의록.md');
@@ -696,6 +701,39 @@ test('team approval, space access and original file lifecycle', async (t) => {
     offset: contents.chapters[1].offset,
     limit: 1,
   });
+  const noMatch = await readTool('search_passages', {
+    question: '확인',
+    fileId: bookId,
+    range: { unit: 'chapter', start: 999, end: 999 },
+  });
+  assert.deepEqual(noMatch.results, []);
+  const scopedText = await call('read_file_text', {
+    fileId: bookId,
+    range: { unit: 'chapter', start: 2, end: 2 },
+    limit: 1,
+  });
+  const report = JSON.parse((scopedText.content as { text: string }[])[0].text);
+  assert.deepEqual(report, scopedText.structuredContent);
+  assert.deepEqual(report.segments, bookText.segments);
+  assert.equal(report.remaining, 0);
+  assert.equal(
+    new URL(report.citations[0]).searchParams.get('segment'),
+    String(contents.chapters[1].offset),
+  );
+  const first = await readTool('read_file_text', {
+    fileId: bookId,
+    range: { unit: 'chapter', start: 2, end: 3 },
+    limit: 1,
+  });
+  assert.equal(first.remaining, 1);
+  const last = await readTool('read_file_text', {
+    fileId: bookId,
+    range: { unit: 'chapter', start: 2, end: 3 },
+    offset: first.nextOffset,
+    limit: 1,
+  });
+  assert.equal(last.segments[0].start, 3);
+  assert.equal(last.nextOffset, null);
   assert.deepEqual(bookText.segments, [
     {
       unit: 'chapter',

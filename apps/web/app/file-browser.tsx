@@ -104,6 +104,52 @@ export function FileBrowser({
   const picker = useRef<HTMLInputElement>(null);
   const dialog = useRef<HTMLDialogElement>(null);
   const pending = useRef(false);
+  useEffect(() => {
+    const query = new URLSearchParams(window.location.search);
+    const id = query.get('file');
+    if (!id) return;
+    const values = ['segment', 'offset', 'length'].map((k) =>
+      Number(query.get(k) ?? 0),
+    );
+    if (
+      !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(id) ||
+      !values.every((n) => Number.isSafeInteger(n) && n >= 0) ||
+      values[0] > 8192
+    ) {
+      setError('올바르지 않은 출처 링크입니다.');
+      return;
+    }
+    const [segment, offset, length] = values;
+    const c = new AbortController();
+    void api('files/' + id + '/text?offset=' + segment, { signal: c.signal })
+      .then((data) => {
+        if (c.signal.aborted) return;
+        const part = data.segments[0];
+        if (!part)
+          throw new Error(
+            '출처 구간을 찾을 수 없습니다. 문서를 다시 검색하세요.',
+          );
+        setPreview({
+          id,
+          name: data.name,
+          source: {
+            ...part,
+            segment,
+            offset,
+            fileId: id,
+            name: data.name,
+            path: [],
+            text: Array.from(part.text as string)
+              .slice(offset, length ? offset + length : undefined)
+              .join(''),
+          },
+        });
+      })
+      .catch((err) => {
+        if (!c.signal.aborted) setError(err.message);
+      });
+    return () => c.abort();
+  }, []);
   const current = folder.current;
   useEffect(() => {
     if (!folder.entries.some((e) => e.thumbnail?.pending)) return;
@@ -729,7 +775,15 @@ export function FileBrowser({
           file={preview}
           source={preview.source}
           writable={writable}
-          close={() => setPreview(null)}
+          close={() => {
+            setPreview(null);
+            const url = new URL(location.href);
+            if (url.searchParams.has('file')) {
+              for (const k of ['file', 'segment', 'offset', 'length'])
+                url.searchParams.delete(k);
+              history.replaceState(history.state, '', url);
+            }
+          }}
         />
       )}
       {dragging && (
