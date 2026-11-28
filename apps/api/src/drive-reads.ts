@@ -74,16 +74,34 @@ export async function readText(
   id: string,
   offset: number,
   limit = 10,
+  range?: import('./evidence-search.js').SourceRange,
 ) {
+  // Extraction emits ordered, contiguous groups for each page or chapter.
+  const bounds = range
+    ? `CROSS JOIN LATERAL (
+    SELECT coalesce(min(ord)-1,0)::int AS first, count(*)::int AS total
+    FROM jsonb_array_elements(t.src_sctn_list) WITH ORDINALITY AS parts(s,ord)
+    WHERE s->>'unit'=$5 AND (s->>'start')::int BETWEEN $6 AND $7) b`
+    : '';
+  const total = range
+    ? 'b.total'
+    : 'coalesce(jsonb_array_length(t.src_sctn_list),0)';
+  const first = range ? 'b.first' : '0';
   const {
     rows: [row],
   } = await db.query(
     `SELECT a.artcl_nm AS name,coalesce(t.prcs_stts_cd,'unsupported') AS status,t.fail_rsn AS reason,
-      coalesce(jsonb_array_length(t.src_sctn_list),0) AS total,
-      ARRAY(SELECT t.src_sctn_list->i FROM generate_series($3::int,least($3::int+$4::int-1,coalesce(jsonb_array_length(t.src_sctn_list),0)-1)) i ORDER BY i) AS segments
-      FROM doc_artcl a LEFT JOIN doc_artcl_txt t USING(artcl_idntfr) WHERE a.artcl_idntfr=$1
+      ${total} AS total, ${first} AS "firstSegment",
+      ARRAY(SELECT t.src_sctn_list->(${first}+i) FROM generate_series($3::int,least($3::int+$4::int-1,${total}-1)) i ORDER BY i) AS segments
+      FROM doc_artcl a LEFT JOIN doc_artcl_txt t USING(artcl_idntfr) ${bounds} WHERE a.artcl_idntfr=$1
       AND a.doc_space_idntfr=$2 AND a.s3_objt_key IS NOT NULL AND a.del_grp_idntfr IS NULL`,
-    [id, space, offset, limit],
+    [
+      id,
+      space,
+      offset,
+      limit,
+      ...(range ? [range.unit, range.start, range.end] : []),
+    ],
   );
   if (!row) throw new HttpError(404, '파일을 찾을 수 없습니다.');
   return {

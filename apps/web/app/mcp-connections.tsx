@@ -10,6 +10,7 @@ export function McpConnections({ canIssue }: { canIssue: boolean }) {
   const [endpoint, setEndpoint] = useState(''),
     [message, setMessage] = useState(''),
     [busy, setBusy] = useState(false);
+  const command = `codex mcp add cibo-drive --url '${endpoint}' --bearer-token-env-var CIBO_MCP_TOKEN`;
   async function refresh() {
     setConnections(await api('mcp-tokens'));
   }
@@ -114,6 +115,44 @@ export function McpConnections({ canIssue }: { canIssue: boolean }) {
             앱의 MCP 설정에서 연결 방식은 <strong>Streamable HTTP</strong>를
             선택하고 아래 서버 주소를 붙여 넣으세요.
           </p>
+          <details>
+            <summary>Codex에 연결하기</summary>
+            <p>
+              Mac 터미널(zsh)에서 아래 첫 줄을 실행하고 발급된 토큰을 붙여
+              넣으세요. 입력은 화면에 표시되지 않습니다.
+            </p>
+            <pre>
+              read -rs 'CIBO_MCP_TOKEN?Cibo 토큰: ' &amp;&amp; export
+              CIBO_MCP_TOKEN
+            </pre>
+            <pre>{command}</pre>
+            <button
+              disabled={!endpoint}
+              onClick={() =>
+                void action(async () => {
+                  await navigator.clipboard.writeText(command);
+                  setMessage('Codex 등록 명령을 복사했습니다.');
+                })
+              }
+            >
+              Codex 등록 명령 복사
+            </button>
+            <p>
+              <code>codex mcp get cibo-drive</code>로 등록을 확인하고, 같은
+              터미널에서 <code>codex</code>를 실행하세요. 데스크톱 앱은 앱 실행
+              환경에도 CIBO_MCP_TOKEN이 필요합니다.
+            </p>
+            <p>
+              Codex에 “cibo-drive의 connection_status를 실행해줘”라고
+              요청하세요. 인증과 현재 공간의 색인 완료 파일 수를 확인한 뒤 질문
+              검색을 시험할 수 있습니다.
+            </p>
+            <p>
+              연결 거부 시 서버 주소와 실행 상태를 확인하세요. 401이면 토큰
+              만료·해제 또는 실행 환경을, 403이면 계정 상태와 공간 권한을
+              확인하세요.
+            </p>
+          </details>
           <div className="mcp-endpoint">
             <label>
               서버 주소

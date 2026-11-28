@@ -1,5 +1,6 @@
 import { BookOpen, ChevronLeft, ChevronRight } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
+import { CitedText } from './cited-text';
 import { api, post } from './drive-api';
 
 type Chapter = {
@@ -21,14 +22,19 @@ export function EpubReader({
   writable,
 }: {
   fileId: string;
-  initialSource?: { start: number; segment: number };
+  initialSource?: {
+    start: number;
+    segment: number;
+    offset: number;
+    text: string;
+  };
   writable: boolean;
 }) {
   const path = 'files/' + encodeURIComponent(fileId);
   const [book, setBook] = useState<Contents | null>(null),
     [index, setIndex] = useState(0),
     [page, setPage] = useState(0);
-  const [text, setText] = useState<string | null>(null),
+  const [text, setText] = useState<ReactNode>(null),
     [error, setError] = useState(''),
     [attempt, setAttempt] = useState(0);
   const [fontSize, setFontSize] = useState(20);
@@ -102,15 +108,21 @@ export function EpubReader({
           setText(
             data.segments
               .filter((s: { start: number }) => s.start === chapter.number)
-              .map((s: { text: string }) => s.text)
-              .join(''),
+              .map((s: { text: string }, i: number) => (
+                <CitedText
+                  key={i}
+                  text={s.text}
+                  source={initialSource}
+                  segment={chapter.offset + page * 10 + i}
+                />
+              )),
           );
       })
       .catch((e) => {
         if (!c.signal.aborted) setError(e.message);
       });
     return () => c.abort();
-  }, [chapter, page, path]);
+  }, [chapter, page, path, initialSource]);
   function go(i: number, p = 0) {
     setText(null);
     setIndex(i);

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { CitedText, type Citation } from './cited-text';
 import { api, post } from './drive-api';
 
 export type Section = {
@@ -25,14 +26,14 @@ export function DocumentSources({
   fileId,
   writable,
   openPage,
-  initialOffset = 0,
+  source,
 }: {
   fileId: string;
   writable: boolean;
-  initialOffset?: number;
+  source?: Citation;
   openPage: (n: number) => void;
 }) {
-  const [offset, setOffset] = useState(initialOffset),
+  const [offset, setOffset] = useState(source?.segment ?? 0),
     [result, setResult] = useState<TextPage | null>(null),
     [error, setError] = useState(''),
     [revision, setRevision] = useState(0);
@@ -102,7 +103,9 @@ export function DocumentSources({
           ) : (
             <strong>{sourceLocation(s)}</strong>
           )}
-          <pre>{s.text}</pre>
+          <pre>
+            <CitedText text={s.text} segment={offset + i} source={source} />
+          </pre>
         </article>
       ))}
       {result.total > 10 && (

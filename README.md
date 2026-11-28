@@ -108,10 +108,17 @@ npx --package=node@24 --package=@modelcontextprotocol/inspector@2.17.0 mcp-inspe
 
 개별 호출은 `--method tools/call --tool-name search_files --tool-args-json '{"query":"회의록"}'`처럼 지정합니다. 폴더·검색은 기본 30개(최대 100개), 본문은 기본 3구간(최대 10구간)입니다. 다음 조회에는 응답의 `nextOffset`을 `offset`으로 전달합니다.
 
+### Codex에서 연결 확인과 범위 요약
+
+웹의 **MCP 연결 → Codex에 연결하기**에서 현재 서버에 맞는 등록 명령을 복사합니다. 토큰은 Codex를 실행하는 환경에 설정하고 `codex mcp get cibo-drive`로 등록을 확인합니다. Codex에서 `connection_status`를 호출하면 실제 인증 성공 여부와 읽을 수 있는 공간의 색인 현황을 확인할 수 있습니다. 서버 연결 거부는 주소·실행 상태, HTTP 401은 토큰 누락·만료, HTTP 403은 계정 상태·공간 권한을 확인합니다.
+
+“이 책 25장 전체를 요약하고 근거를 연결해줘”처럼 요청할 수 있습니다. `get_file_metadata`로 EPUB 목차 번호와 제목을 확인하고 `read_file_text`에 `range: {"unit":"chapter","start":25,"end":25}`를 지정합니다. PDF는 `page`를 사용합니다. 범위를 유지하며 `nextOffset`으로 이어 읽고, 일부만 읽으면 읽은 구간과 남은 양을 명시합니다. `search_passages`도 선택적으로 파일 ID와 범위를 받습니다. 읽기 응답의 `citations`와 검색 결과의 `previewUrl`은 로그인 후 실제 파일과 출처를 다시 확인하는 웹 링크입니다. 검색·읽기 성공 응답은 기존 JSON 텍스트와 `structuredContent`를 함께 제공합니다.
+
 ### 읽기 도구
 
 | 도구 | 주요 입력 | 반환 |
 | --- | --- | --- |
+| `connection_status` | 없음 | 인증 확인·검색 준비 상태·색인된 파일 수와 다음 조치 |
 | `list_folder` | 폴더 ID(생략하면 루트), limit, offset | 접근 가능한 하위 폴더와 파일 목록 |
 | `search_files` | 파일명 검색어, 선택적 폴더 범위, limit, offset | 파일 ID, 이름, 폴더 경로, 수정 시각 |
 | `search_passages` | 자연어 질문 `question`, 선택적 `limit` (기본 5, 최대 10) | 유사도순 문단과 파일명·경로·출처 위치·로그인이 필요한 원본 링크 |

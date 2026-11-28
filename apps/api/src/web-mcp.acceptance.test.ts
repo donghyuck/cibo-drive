@@ -256,6 +256,18 @@ test(
         ],
         [id, expectedName, bytes.toString(), link],
       );
+      assert.equal(results[0].previewUrl, hit.previewUrl);
+      const cited = await editor.context().newPage();
+      try {
+        await cited.goto(hit.previewUrl);
+        await cited
+          .getByRole('dialog', { name: expectedName })
+          .locator('mark')
+          .getByText(bytes.toString(), { exact: true })
+          .waitFor();
+      } finally {
+        await cited.close();
+      }
       const original = await get(link);
       assert.equal(original.status(), 200);
       assert.deepEqual(await original.body(), bytes);
@@ -271,6 +283,21 @@ test(
     }
     async function blockedLinks(status: number) {
       assert.deepEqual(await indexState(), indexed);
+      const denied = await editor.context().newPage();
+      try {
+        await denied.goto(hit.previewUrl);
+        await denied
+          .getByText(
+            status === 404
+              ? '파일을 찾을 수 없습니다.'
+              : /공간 접근 권한이 필요|정지된 계정/,
+          )
+          .first()
+          .waitFor();
+        assert.equal(await denied.getByRole('dialog').count(), 0);
+      } finally {
+        await denied.close();
+      }
       for (const response of await Promise.all([
         get(link),
         get(preview, true),
@@ -378,7 +405,7 @@ test(
     assert.deepEqual(hidden.content, [
       { type: 'text', text: JSON.stringify({ results: [] }) },
     ]);
-    assert.equal(hidden.structuredContent, undefined);
+    assert.deepEqual(hidden.structuredContent, { results: [] });
     await blockedLinks(404);
     assert.deepEqual((await read('list_folder', { folderId })).entries, []);
     assert.deepEqual(
