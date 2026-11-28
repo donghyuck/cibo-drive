@@ -108,6 +108,16 @@ npx --package=node@24 --package=@modelcontextprotocol/inspector@2.17.0 mcp-inspe
 
 개별 호출은 `--method tools/call --tool-name search_files --tool-args-json '{"query":"회의록"}'`처럼 지정합니다. 폴더·검색은 기본 30개(최대 100개), 본문은 기본 3구간(최대 10구간)입니다. 다음 조회에는 응답의 `nextOffset`을 `offset`으로 전달합니다.
 
+### 브라우저에서 Codex 연결
+
+웹의 **MCP 연결 → Codex에서 브라우저로 연결하기**에 표시되는 서버 주소를 사용합니다.
+
+```sh
+codex mcp add cibo-drive-oauth --url http://localhost:3000/api/mcp --oauth-client-id cibo-codex
+```
+
+OAuth 로그인이 자동 시작됩니다. 이미 등록한 서버는 `codex mcp login cibo-drive-oauth`로 로그인할 수 있습니다. 브라우저에서 기존 Cibo 계정으로 로그인하고 **읽기 권한 승인**을 선택합니다. Codex가 인증 정보를 저장하고 필요할 때 갱신합니다. 접근 토큰은 1시간, 갱신 토큰은 마지막 갱신부터 90일간 유효합니다. **MCP 연결**에서 해제하면 접근과 갱신이 모두 종료됩니다. 팀 서버는 HTTPS 주소를 사용하고 브라우저·클라이언트의 서버 주소를 동일하게 지정합니다.
+
 ### Codex에서 연결 확인과 범위 요약
 
 웹의 **MCP 연결 → Codex에 연결하기**에서 현재 서버에 맞는 등록 명령을 복사합니다. 토큰은 Codex를 실행하는 환경에 설정하고 `codex mcp get cibo-drive`로 등록을 확인합니다. Codex에서 `connection_status`를 호출하면 실제 인증 성공 여부와 읽을 수 있는 공간의 색인 현황을 확인할 수 있습니다. 서버 연결 거부는 주소·실행 상태, HTTP 401은 토큰 누락·만료, HTTP 403은 계정 상태·공간 권한을 확인합니다.

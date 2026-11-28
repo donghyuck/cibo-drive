@@ -7,13 +7,19 @@ const config: NextConfig = {
   poweredByHeader: false,
   devIndicators: { position: 'bottom-right' },
   experimental: { proxyClientMaxBodySize: '32mb' },
-  rewrites: staticExport ? undefined : async () => {
-    return [
-      {
-        source: '/api/:path*',
-        destination: `http://127.0.0.1:${process.env.CIBO_API_PORT ?? '4000'}/api/:path*`,
+  rewrites: staticExport
+    ? undefined
+    : async () => {
+        return [
+          {
+            source: '/.well-known/:path*',
+            destination: `http://127.0.0.1:${process.env.CIBO_API_PORT ?? '4000'}/.well-known/:path*`,
+          },
+          {
+            source: '/api/:path*',
+            destination: `http://127.0.0.1:${process.env.CIBO_API_PORT ?? '4000'}/api/:path*`,
+          },
+        ];
       },
-    ];
-  },
 };
 export default config;

@@ -1,5 +1,6 @@
 {$SITE_ADDRESS} {
-	handle /api/* {
+	@api path /api/* /.well-known/oauth-*
+	handle @api {
 		reverse_proxy api:4000
 	}
 	handle {

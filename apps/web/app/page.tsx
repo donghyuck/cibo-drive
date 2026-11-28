@@ -95,6 +95,16 @@ export default function Drive() {
   const [ready, setReady] = useState(false);
   const [message, setMessage] = useState('');
   const [view, setView] = useState<'files' | 'accounts' | 'mcp'>('files');
+  const [oauthRequest, setOAuthRequest] = useState<Record<
+    string,
+    string
+  > | null>(null);
+  const [approving, setApproving] = useState(false);
+  useEffect(() => {
+    const params = new URLSearchParams(location.hash.slice(1));
+    if (params.get('cibo_oauth') === '1')
+      setOAuthRequest(Object.fromEntries(params));
+  }, []);
   const [homeKey, setHomeKey] = useState(0);
   const login = useRef<HTMLDivElement>(null);
   async function refresh() {
@@ -191,7 +201,47 @@ export default function Drive() {
             <div ref={login} />
           </section>
         )}
-        {user && view === 'mcp' ? (
+        {user && oauthRequest ? (
+          <section className="welcome">
+            <h1>Codex 읽기 권한 승인</h1>
+            <p>
+              {user.email} 계정이 접근할 수 있는 문서 공간의 검색과 본문 읽기를
+              허용합니다.
+            </p>
+            <p>
+              연결 결과를 이 Mac에서 대기 중인 Codex(127.0.0.1)로 돌려보냅니다.
+              연결은 MCP 연결 화면에서 해제할 수 있습니다.
+            </p>
+            <div className="space-tools">
+              {[true, false].map((approve) => (
+                <button
+                  key={String(approve)}
+                  className={approve ? 'primary' : undefined}
+                  disabled={
+                    approving ||
+                    (approve && (user.status !== 'active' || !user.space_id))
+                  }
+                  onClick={() =>
+                    void act(async () => {
+                      setApproving(true);
+                      try {
+                        const { redirect } = await post('oauth/approve', {
+                          ...oauthRequest,
+                          approve,
+                        });
+                        location.replace(redirect);
+                      } finally {
+                        setApproving(false);
+                      }
+                    })
+                  }
+                >
+                  {approve ? '읽기 권한 승인' : '거부'}
+                </button>
+              ))}
+            </div>
+          </section>
+        ) : user && view === 'mcp' ? (
           <McpConnections
             canIssue={user.status === 'active' && Boolean(user.space_id)}
           />

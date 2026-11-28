@@ -7,7 +7,7 @@ export const tokenAccess = (
 ) => `SELECT a.acnt_stts_cd AS status,t.doc_space_idntfr AS space,m.acnt_idntfr AS member
       FROM mcp_acs_tkn t JOIN user_acnt a USING(acnt_idntfr)
       LEFT JOIN doc_space_acs_authrt m ON m.acnt_idntfr=a.acnt_idntfr AND m.doc_space_idntfr=t.doc_space_idntfr
-      WHERE t.tkn_sha256=${parameter} AND t.expry_dt>now()`;
+      WHERE t.tkn_sha256=${parameter} AND t.expry_dt>now() AND t.pkce_challenge IS NULL`;
 
 const sessionAccess = `SELECT a.acnt_stts_cd AS status,m.doc_space_idntfr AS space,m.acnt_idntfr AS member
   FROM lgn_ssn s JOIN user_acnt a USING(acnt_idntfr)

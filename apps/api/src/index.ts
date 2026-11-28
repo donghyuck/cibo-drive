@@ -1,3 +1,4 @@
+import { oauthDiscovery } from './mcp-oauth.js';
 import { embeddingProvider, startIndexing } from './embeddings.js';
 import { fillMissingFileSizes } from './file-sizes.js';
 import pg from 'pg';
@@ -40,6 +41,8 @@ if (process.env.DATABASE_URL) {
   void fillMissingFileSizes(db, s3, env.S3_BUCKET).catch(() =>
     console.warn('File size backfill unavailable'),
   );
+  const origin = env.CIBO_WEB_ORIGIN ?? 'http://127.0.0.1:3000';
+  app.use('/.well-known', oauthDiscovery(origin));
   const provider = embeddingProvider(env);
   if (provider) startIndexing(db, provider);
   startExtraction(db, async (key) => {
@@ -57,7 +60,7 @@ if (process.env.DATABASE_URL) {
       db,
       s3,
       bucket: env.S3_BUCKET,
-      origin: env.CIBO_WEB_ORIGIN ?? 'http://127.0.0.1:3000',
+      origin,
       clientId: env.GOOGLE_CLIENT_ID ?? '',
       masterSubject: env.CIBO_MASTER_GOOGLE_SUB ?? '',
       verify: googleVerifier(env.GOOGLE_CLIENT_ID ?? ''),
