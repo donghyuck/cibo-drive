@@ -51,6 +51,7 @@
 | 신규 컬럼 | — | `doc_artcl_txt.artcl_idntfr` | 문서 항목 식별자 · 원본 파일 외래 키 |
 | 신규 컬럼 | — | `doc_artcl_txt.prcs_stts_cd` | 표준단어 조합 · 처리 + 상태 + 코드 |
 | 신규 컬럼 | — | `doc_artcl_txt.src_sctn_list` | 표준단어 조합 · 출처 + 구간 + 목록 |
+| 신규 컬럼 | — | `doc_artcl_txt.srch_sctn_list` | 프로젝트 조합 · 검색 + 구간 + 목록 · 원본 파일별 순서가 있는 JSON 배열 |
 | 신규 컬럼 | — | `doc_artcl_txt.fail_rsn` | 등록 용어 실패사유 · FAIL_RSN |
 | 신규 컬럼 | — | `doc_artcl.del_dt` | 삭제일시 · DEL_DT · 논리 삭제 시각 |
 | 신규 컬럼 | — | `doc_artcl.del_grp_idntfr` | 프로젝트 조합 · 삭제 + 그룹 + 식별자 · 함께 복원하는 하위 트리 루트 ID |

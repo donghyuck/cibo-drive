@@ -16,7 +16,8 @@
     "build": "npm run build --workspaces",
     "infra:check": "node --env-file=.env --import tsx apps/api/src/check-infra.ts",
     "test:drive": "node --env-file-if-exists=.env --import tsx --test apps/api/src/drive.integration.test.ts",
-    "test:acceptance": "node --env-file-if-exists=.env --import tsx --test apps/api/src/web-mcp.acceptance.test.ts"
+    "test:acceptance": "node --env-file-if-exists=.env --import tsx --test apps/api/src/web-mcp.acceptance.test.ts",
+    "passages:rebuild": "node --env-file-if-exists=.env --import tsx apps/api/src/rebuild-passages.ts"
   },
   "devDependencies": {
     "concurrently": "^9.2.1",

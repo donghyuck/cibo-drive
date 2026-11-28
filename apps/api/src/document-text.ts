@@ -6,14 +6,8 @@ import type { Readable } from 'node:stream';
 import type pg from 'pg';
 import { transaction } from './drive-db.js';
 
-type Segment = {
-  unit: 'page' | 'paragraph' | 'line' | 'chapter';
-  start: number;
-  end: number;
-  text: string;
-  chapterTitle?: string;
-  href?: string;
-};
+import { rebuildPassages, splitPassages, type Segment } from './passages.js';
+
 type Result =
   | { status: 'ready' | 'empty'; segments: Segment[] }
   | { status: 'failed'; reason: string };
@@ -92,12 +86,15 @@ export async function extractNext(
       };
     }
     await client.query(
-      `UPDATE doc_artcl_txt SET prcs_stts_cd=$2,src_sctn_list=$3::jsonb,fail_rsn=$4,thmb_prcs_yn=false WHERE artcl_idntfr=$1`,
+      `UPDATE doc_artcl_txt SET prcs_stts_cd=$2,src_sctn_list=$3::jsonb,fail_rsn=$4,srch_sctn_list=$5::jsonb,thmb_prcs_yn=false WHERE artcl_idntfr=$1`,
       [
         job.id,
         result.status,
         JSON.stringify(result.status === 'failed' ? [] : result.segments),
         result.status === 'failed' ? result.reason : null,
+        JSON.stringify(
+          result.status === 'ready' ? splitPassages(result.segments) : [],
+        ),
       ],
     );
     return true;
@@ -145,6 +142,7 @@ export function startExtraction(
     let more = false;
     try {
       more = await extractNext(db, read);
+      if (await rebuildPassages(db)) more = true;
       if (await thumbnailNext(db, read)) more = true;
     } catch {
       console.error('Document extraction queue unavailable');
