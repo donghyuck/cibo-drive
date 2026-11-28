@@ -1384,36 +1384,59 @@ dialog.lookup {
   font: 12px/1.5 system-ui;
   max-height: 82px;
 }
-.ebook nav {
-  position: sticky;
-  top: 0;
-  background: #f6f8f6;
+.ebook {
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  background: #e9e5dc;
+  color: #38332a;
+}
+.ebook-controls, .ebook-turn {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px clamp(10px, 3vw, 32px);
+  background: #faf8f3;
 }
-.ebook nav label {
+.ebook-controls { border-bottom: 1px solid #d7d1c5; }
+.ebook-controls label, .ebook-size, .ebook-turn button {
   display: flex;
   align-items: center;
-  gap: 8px;
-  min-width: 0;
-  flex: 1;
-  margin: 0;
+  gap: 6px;
 }
-.ebook select {
+.ebook-controls label { min-width: 0; margin: 0; white-space: nowrap; }
+.ebook-controls label svg, .ebook-size { flex: none; }
+.ebook-controls select {
   min-width: 0;
-  max-width: 100%;
-  flex: 1;
-  padding: 7px;
-  border: 1px solid var(--line);
-  background: white;
-  border-radius: 6px;
-}
-.ebook .preview-paper pre {
+  max-width: 32ch;
+  width: 100%;
+  padding: 6px;
   font: inherit;
-  line-height: 1.8;
+  color: inherit;
+  background: transparent;
+  border: 1px solid #d7d1c5;
+  border-radius: 5px;
 }
+.ebook button { min-height: 36px; color: inherit; background: transparent; }
+.ebook button:disabled { opacity: .4; }
+.ebook-scroll { overflow: auto; overscroll-behavior: contain; padding: clamp(10px, 3vw, 32px); }
+.ebook-page {
+  box-sizing: border-box;
+  width: min(100%, 38em);
+  min-height: 100%;
+  margin: 0 auto;
+  padding: clamp(30px, 6vw, 76px) clamp(20px, 6vw, 76px);
+  background: linear-gradient(90deg, #ebe5d7, #fffcf3 14px);
+  box-shadow: 0 1px 4px #453d2929, 2px 3px #f6f1e6, 3px 4px #cdc6b7;
+  font-family: "Iowan Old Style", "AppleMyungjo", "Batang", "Noto Serif CJK KR", serif;
+  overflow-wrap: anywhere;
+}
+.ebook-page small { font-size: .72em; color: #76664f; letter-spacing: .12em; }
+.ebook-page h3 { margin: .5em 0 1.3em; font-size: 1.65em; line-height: 1.35; }
+.ebook-prose { white-space: pre-wrap; line-height: 1.95; }
+.ebook-turn { border-top: 1px solid #d7d1c5; }
+.ebook-turn span { font-size: 13px; font-variant-numeric: tabular-nums; }
 .crumbs .path-shortcut {
   border: 1px solid var(--line);
   padding: 4px 9px;
