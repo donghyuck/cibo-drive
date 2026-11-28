@@ -1,5 +1,5 @@
 import { HttpError, nameOf, transaction, lockSpace } from './drive-db.js';
-import { listFolder, folder, readText } from './drive-reads.js';
+import { listFolder, folder, readText, bookContents } from './drive-reads.js';
 import { mcpEndpoint, tokenRoutes } from './user-mcp.js';
 import { entryRoutes } from './entry-routes.js';
 import express, { type Request, type Response } from 'express';
@@ -197,13 +197,23 @@ export function driveRouter(settings: Settings) {
   });
   router.use(entryRoutes(db));
   router.get('/folder', async (req, res) => {
-    res.json(await listFolder(db, res.locals.user.space_id, req.query.id));
+    res.json(
+      await listFolder(
+        db,
+        res.locals.user.space_id,
+        req.query.id,
+        null,
+        0,
+        true,
+      ),
+    );
   });
   async function insert(
     res: Response,
     parent: string,
     name: string,
     key: string | null,
+    size: number | null = null,
   ) {
     return transaction(db, async (client) => {
       const u = res.locals.user;
@@ -215,8 +225,8 @@ export function driveRouter(settings: Settings) {
       if (!live.rowCount)
         throw new HttpError(404, '대상 폴더를 찾을 수 없습니다.');
       const { rows } = await client.query(
-        'INSERT INTO doc_artcl(doc_space_idntfr,up_artcl_idntfr,artcl_nm,s3_objt_key,creatr_acnt_idntfr) VALUES ($1,$2,$3,$4,$5) RETURNING artcl_idntfr AS id',
-        [u.space_id, parent, name, key, u.id],
+        'INSERT INTO doc_artcl(doc_space_idntfr,up_artcl_idntfr,artcl_nm,s3_objt_key,creatr_acnt_idntfr,file_sz) VALUES ($1,$2,$3,$4,$5,$6) RETURNING artcl_idntfr AS id',
+        [u.space_id, parent, name, key, u.id, size],
       );
       if (key)
         await client.query(
@@ -237,11 +247,13 @@ export function driveRouter(settings: Settings) {
   });
   router.post(
     '/files',
-    express.raw({ type: 'application/octet-stream', limit: '10mb' }),
+    express.raw({ type: 'application/octet-stream', limit: '30mb' }),
     async (req, res) => {
       const name = nameOf(req.query.name);
       if (
-        !['.pdf', '.docx', '.txt', '.md'].includes(extname(name).toLowerCase())
+        !['.pdf', '.docx', '.txt', '.md', '.epub'].includes(
+          extname(name).toLowerCase(),
+        )
       )
         throw new HttpError(400, '지원하지 않는 확장자입니다.');
       if (!Buffer.isBuffer(req.body))
@@ -256,7 +268,9 @@ export function driveRouter(settings: Settings) {
         new PutObjectCommand({ Bucket: bucket, Key: key, Body: req.body }),
       );
       try {
-        res.status(201).json(await insert(res, parent.id, name, key));
+        res
+          .status(201)
+          .json(await insert(res, parent.id, name, key, req.body.length));
       } catch (error) {
         // A lost COMMIT response may still represent a committed file.
         const referenced = await db.query(
@@ -293,6 +307,28 @@ export function driveRouter(settings: Settings) {
       .type('application/octet-stream')
       .set('X-Content-Type-Options', 'nosniff');
     await pipeline(stream, res);
+  });
+  router.get('/files/:id/thumbnail', async (req, res) => {
+    const {
+      rows: [thumb],
+    } = await db.query(
+      `SELECT t.thmb_img FROM doc_artcl a JOIN doc_artcl_txt t USING(artcl_idntfr)
+      WHERE a.artcl_idntfr=$1 AND a.doc_space_idntfr=$2 AND a.del_grp_idntfr IS NULL AND t.thmb_img IS NOT NULL`,
+      [req.params.id, res.locals.user.space_id],
+    );
+    if (!thumb) throw new HttpError(404, '썸네일이 없습니다.');
+    res
+      .type('image/jpeg')
+      .set('X-Content-Type-Options', 'nosniff')
+      .send(thumb.thmb_img);
+  });
+  router.get('/files/:id/chapters', async (req, res) => {
+    const result = await bookContents(
+      db,
+      res.locals.user.space_id,
+      req.params.id,
+    );
+    res.status(result.status === 'processing' ? 202 : 200).json(result);
   });
   router.get('/files/:id/text', async (req, res) => {
     const offset = Number(req.query.offset ?? 0);
@@ -389,7 +425,7 @@ export function driveRouter(settings: Settings) {
           : status === 409
             ? '같은 이름이 있습니다.'
             : status === 413
-              ? '10 MiB 이하 파일을 선택하세요.'
+              ? '30 MiB 이하 파일을 선택하세요.'
               : '요청을 처리할 수 없습니다.',
     });
   }) satisfies express.ErrorRequestHandler);

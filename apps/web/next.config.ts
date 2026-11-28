@@ -6,7 +6,7 @@ const config: NextConfig = {
   output: staticExport ? 'export' : 'standalone',
   poweredByHeader: false,
   devIndicators: { position: 'bottom-right' },
-  experimental: { proxyClientMaxBodySize: '12mb' },
+  experimental: { proxyClientMaxBodySize: '32mb' },
   rewrites: staticExport ? undefined : async () => {
     return [
       {

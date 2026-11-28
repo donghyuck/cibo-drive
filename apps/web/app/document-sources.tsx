@@ -2,10 +2,11 @@ import { useEffect, useState } from 'react';
 import { api, post } from './drive-api';
 
 type Section = {
-  unit: 'page' | 'paragraph' | 'line';
+  unit: 'page' | 'paragraph' | 'line' | 'chapter';
   start: number;
   end: number;
   text: string;
+  chapterTitle?: string;
 };
 type TextPage = {
   status: 'processing' | 'failed' | 'empty' | 'ready';
@@ -17,6 +18,7 @@ type TextPage = {
 };
 function location(s: Section) {
   const n = s.start === s.end ? String(s.start) : s.start + '–' + s.end;
+  if (s.unit === 'chapter') return n + '장 · ' + s.chapterTitle;
   return n + { page: '페이지', paragraph: '문단', line: '줄' }[s.unit];
 }
 export function DocumentSources({

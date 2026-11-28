@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type DragEvent } from 'react';
 import {
   Eye,
   Ellipsis,
@@ -9,7 +9,8 @@ import {
   FileText,
   Folder as FolderIcon,
   FolderPlus,
-  HardDrive,
+  Home,
+  ArrowUp,
   LayoutGrid,
   Layers3,
   List,
@@ -18,13 +19,38 @@ import {
   X,
 } from 'lucide-react';
 import { EntryTools, SpaceLookup, type DriveItem } from './entry-tools';
+import { MoveConfirmation, type MoveRequest } from './move-confirmation';
 import { FilePreview } from './file-preview';
 import { api, post } from './drive-api';
 
+const maxFileMiB = 30;
+const uploadHint = `파일당 최대 ${maxFileMiB} MiB · PDF, DOCX, TXT, MD, EPUB`;
+
 export type Folder = {
   current: { id: string; name: string; parent_id: string | null };
-  entries: { id: string; name: string; folder: boolean }[];
+  entries: {
+    id: string;
+    name: string;
+    folder: boolean;
+    size: number | null;
+    registered_at: string | null;
+    thumbnail?: {
+      image: boolean;
+      excerpt: string | null;
+      pending: boolean;
+    } | null;
+  }[];
 };
+function fileSize(bytes: number | null) {
+  if (bytes == null) return '—';
+  if (bytes < 1024) return bytes + ' B';
+  return bytes < 1024 ** 2
+    ? (bytes / 1024).toLocaleString('ko-KR', { maximumFractionDigits: 1 }) +
+        ' KiB'
+    : (bytes / 1024 ** 2).toLocaleString('ko-KR', {
+        maximumFractionDigits: 2,
+      }) + ' MiB';
+}
 function fileType(entry: Folder['entries'][number]) {
   if (entry.folder) return '폴더';
   return entry.name.split('.').pop()?.toUpperCase() || '파일';
@@ -39,7 +65,7 @@ export function FileBrowser({
 }) {
   const [folder, setFolder] = useState(initial);
   const [trail, setTrail] = useState([initial.current]);
-  const [preview, setPreview] = useState<Folder['entries'][number] | null>(
+  const [preview, setPreview] = useState<Pick<DriveItem, 'id' | 'name'> | null>(
     null,
   );
   const [lookup, setLookup] = useState<'search' | 'trash' | null>(null);
@@ -63,12 +89,33 @@ export function FileBrowser({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const internalDrag = useRef<DriveItem | null>(null);
+  const [overId, setOverId] = useState<string | null>(null);
+  const [move, setMove] = useState<MoveRequest | null>(null);
   const [dragging, setDragging] = useState(false);
   const [name, setName] = useState('');
   const picker = useRef<HTMLInputElement>(null);
   const dialog = useRef<HTMLDialogElement>(null);
   const pending = useRef(false);
   const current = folder.current;
+  useEffect(() => {
+    if (!folder.entries.some((e) => e.thumbnail?.pending)) return;
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      api('folder?id=' + encodeURIComponent(folder.current.id), {
+        signal: controller.signal,
+      })
+        .then((next) => {
+          if (!controller.signal.aborted)
+            setFolder((old) => (old === folder ? next : old));
+        })
+        .catch(() => {});
+    }, 5000);
+    return () => {
+      controller.abort();
+      clearTimeout(timer);
+    };
+  }, [folder]);
   async function perform(work: () => Promise<void>) {
     if (pending.current) return;
     pending.current = true;
@@ -98,12 +145,72 @@ export function FileBrowser({
       setFilter('전체');
     });
   }
+  function dragStart(e: DragEvent, item: DriveItem) {
+    if (!writable || busy) {
+      e.preventDefault();
+      return;
+    }
+    internalDrag.current = item;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('application/x-cibo-item', item.id);
+  }
+  function endDrag() {
+    internalDrag.current = null;
+    setOverId(null);
+  }
+  function dropTarget(id: string, path: string) {
+    const valid = (e: DragEvent) =>
+      writable &&
+      !busy &&
+      internalDrag.current !== null &&
+      id !== current.id &&
+      id !== internalDrag.current.id &&
+      e.dataTransfer.types.includes('application/x-cibo-item');
+    return {
+      'data-drop-active': overId === id || undefined,
+      onDragOver: (e: DragEvent) => {
+        if (!valid(e)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        e.dataTransfer.dropEffect = 'move';
+        setOverId(id);
+      },
+      onDragLeave: (e: DragEvent) => {
+        if (
+          !(e.relatedTarget instanceof Node) ||
+          !e.currentTarget.contains(e.relatedTarget)
+        )
+          setOverId((old) => (old === id ? null : old));
+      },
+      onDrop: (e: DragEvent) => {
+        if (!valid(e)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const item = internalDrag.current!;
+        if (e.dataTransfer.getData('application/x-cibo-item') === item.id) {
+          setMove({
+            item,
+            source: {
+              id: current.id,
+              path: trail.map((t) => t.name).join(' / '),
+            },
+            destination: { id, path },
+          });
+        }
+        endDrag();
+      },
+    };
+  }
   function upload(files: File[]) {
     if (!writable || !files.length) return;
     void perform(async () => {
       let count = 0;
       try {
         for (const file of files) {
+          if (file.size > maxFileMiB * 1024 * 1024)
+            throw new Error(
+              `${file.name} · 파일당 최대 ${maxFileMiB} MiB까지 업로드할 수 있습니다.`,
+            );
           setNotice(file.name + ' 업로드 중…');
           try {
             await api(
@@ -192,14 +299,53 @@ export function FileBrowser({
       </header>
       <div className="content">
         <nav className="crumbs" aria-label="폴더 경로">
-          <HardDrive size={16} />
+          <button
+            className="path-shortcut"
+            disabled={busy || !current.parent_id}
+            onClick={() => navigate(initial.current.id)}
+            {...dropTarget(initial.current.id, trail[0].name)}
+          >
+            <Home />
+            최상위로
+          </button>
+          <button
+            className="path-shortcut"
+            disabled={busy || !current.parent_id}
+            onClick={() => {
+              if (current.parent_id) navigate(current.parent_id);
+            }}
+            {...(current.parent_id
+              ? dropTarget(
+                  current.parent_id,
+                  trail
+                    .slice(0, -1)
+                    .map((t) => t.name)
+                    .join(' / '),
+                )
+              : {})}
+          >
+            <ArrowUp />한 단계 위로
+          </button>
+          <span className="crumb-divider" aria-hidden="true">
+            /
+          </span>
           {trail.map((part, i) => (
             <span key={part.id}>
               {i > 0 && <ChevronRight size={14} />}{' '}
               {i === trail.length - 1 ? (
                 <span aria-current="page">{part.name}</span>
               ) : (
-                <button disabled={busy} onClick={() => navigate(part.id)}>
+                <button
+                  disabled={busy}
+                  onClick={() => navigate(part.id)}
+                  {...dropTarget(
+                    part.id,
+                    trail
+                      .slice(0, i + 1)
+                      .map((t) => t.name)
+                      .join(' / '),
+                  )}
+                >
                   {part.name}
                 </button>
               )}
@@ -228,37 +374,42 @@ export function FileBrowser({
               </p>
             </div>
             {writable && (
-              <div className="actions">
-                <button
-                  disabled={busy}
-                  onClick={() => {
-                    setName('');
-                    setError('');
-                    dialog.current?.showModal();
-                  }}
-                >
-                  <FolderPlus />새 폴더
-                </button>
-                <button
-                  className="primary"
-                  disabled={busy}
-                  onClick={() => picker.current?.click()}
-                >
-                  <Upload />
-                  파일 업로드
-                </button>
-                <input
-                  hidden
-                  ref={picker}
-                  type="file"
-                  multiple
-                  accept=".pdf,.docx,.txt,.md"
-                  aria-label="업로드할 파일"
-                  onChange={(e) => {
-                    upload(Array.from(e.target.files ?? []));
-                    e.target.value = '';
-                  }}
-                />
+              <div>
+                <div className="actions">
+                  <button
+                    disabled={busy}
+                    onClick={() => {
+                      setName('');
+                      setError('');
+                      dialog.current?.showModal();
+                    }}
+                  >
+                    <FolderPlus />새 폴더
+                  </button>
+                  <button
+                    className="primary"
+                    aria-describedby="upload-hint"
+                    disabled={busy}
+                    onClick={() => picker.current?.click()}
+                  >
+                    <Upload />
+                    파일 업로드
+                  </button>
+                  <input
+                    hidden
+                    ref={picker}
+                    type="file"
+                    multiple
+                    accept=".pdf,.docx,.txt,.md,.epub"
+                    aria-label="업로드할 파일"
+                    aria-describedby="upload-hint"
+                    onChange={(e) => {
+                      upload(Array.from(e.target.files ?? []));
+                      e.target.value = '';
+                    }}
+                  />
+                </div>
+                <small id="upload-hint">{uploadHint}</small>
               </div>
             )}
           </div>
@@ -310,6 +461,8 @@ export function FileBrowser({
             <div className={'list-head' + (grid ? ' hide' : '')}>
               <span>이름</span>
               <span>유형</span>
+              <span>크기</span>
+              <span>등록일</span>
               <span />
             </div>
             <ul className={grid ? 'items grid' : 'items'}>
@@ -327,11 +480,27 @@ export function FileBrowser({
                             : 'doc')
                       }
                     >
-                      {item.folder ? <FolderIcon /> : <FileText />}
-                      {grid && (
+                      {item.thumbnail?.image ? (
+                        <img
+                          className="art-thumbnail"
+                          alt=""
+                          draggable={false}
+                          loading="lazy"
+                          src={'/api/files/' + item.id + '/thumbnail'}
+                        />
+                      ) : item.folder ? (
+                        <FolderIcon />
+                      ) : (
+                        <FileText />
+                      )}
+                      {grid && !item.thumbnail?.image && (
                         <span className="cover-glyph" aria-hidden="true">
                           {item.folder ? (
                             <FolderIcon />
+                          ) : item.thumbnail?.excerpt ? (
+                            <span className="excerpt-thumb">
+                              {item.thumbnail.excerpt}
+                            </span>
                           ) : (
                             <span className="sheet">
                               <b>{type}</b>
@@ -343,6 +512,35 @@ export function FileBrowser({
                     </span>
                     <span className="filename">{item.name}</span>
                     <span className="kind">{type}</span>
+                    <span className="entry-meta">
+                      <span
+                        aria-label="크기"
+                        title={
+                          item.size == null
+                            ? undefined
+                            : item.size.toLocaleString() + ' 바이트'
+                        }
+                      >
+                        {fileSize(item.size)}
+                      </span>
+                      <time
+                        aria-label="등록일"
+                        dateTime={item.registered_at ?? undefined}
+                        title={
+                          item.registered_at
+                            ? new Date(item.registered_at).toLocaleString(
+                                'ko-KR',
+                              )
+                            : undefined
+                        }
+                      >
+                        {item.registered_at
+                          ? new Date(item.registered_at).toLocaleDateString(
+                              'ko-KR',
+                            )
+                          : '—'}
+                      </time>
+                    </span>
                     <span className="row-action">
                       {item.folder ? <ChevronRight /> : <Eye />}
                     </span>
@@ -351,14 +549,29 @@ export function FileBrowser({
                 return (
                   <li
                     key={item.id}
+                    {...(item.folder
+                      ? dropTarget(
+                          item.id,
+                          [...trail.map((t) => t.name), item.name].join(' / '),
+                        )
+                      : {})}
                     className={writable ? 'manageable' : undefined}
                   >
                     {item.folder ? (
-                      <button disabled={busy} onClick={() => navigate(item.id)}>
+                      <button
+                        draggable={writable && !busy}
+                        onDragStart={(e) => dragStart(e, item)}
+                        onDragEnd={endDrag}
+                        disabled={busy}
+                        onClick={() => navigate(item.id)}
+                      >
                         {inside}
                       </button>
                     ) : (
                       <button
+                        draggable={writable && !busy}
+                        onDragStart={(e) => dragStart(e, item)}
+                        onDragEnd={endDrag}
                         aria-label={item.name + ' 미리보기'}
                         onClick={() => setPreview(item)}
                       >
@@ -419,6 +632,19 @@ export function FileBrowser({
           </div>
         )}
       </div>
+      {move && (
+        <MoveConfirmation
+          move={move}
+          cancel={() => setMove(null)}
+          moved={() => {
+            setMove(null);
+            void perform(async () => {
+              setFolder(await read(current.id));
+              setNotice(move.item.name + ' 항목을 이동했습니다.');
+            });
+          }}
+        />
+      )}
       {lookup && (
         <SpaceLookup
           mode={lookup}
@@ -462,6 +688,7 @@ export function FileBrowser({
         <div className="drop">
           <Upload />
           <strong>이 폴더에 파일 업로드</strong>
+          <small>{uploadHint}</small>
         </div>
       )}
       {writable && (

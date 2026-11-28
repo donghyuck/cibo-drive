@@ -7,10 +7,12 @@ import type pg from 'pg';
 import { transaction } from './drive-db.js';
 
 type Segment = {
-  unit: 'page' | 'paragraph' | 'line';
+  unit: 'page' | 'paragraph' | 'line' | 'chapter';
   start: number;
   end: number;
   text: string;
+  chapterTitle?: string;
+  href?: string;
 };
 type Result =
   | { status: 'ready' | 'empty'; segments: Segment[] }
@@ -22,8 +24,12 @@ const python =
   process.env.CIBO_EXTRACT_PYTHON ||
   fileURLToPath(new URL('../extraction/.venv/bin/python', import.meta.url));
 
-async function parse(stream: Readable, extension: string): Promise<Result> {
-  const child = spawn(python, ['-I', parser, extension], {
+async function parse<T>(
+  stream: Readable,
+  extension: string,
+  ...options: string[]
+): Promise<T> {
+  const child = spawn(python, ['-I', parser, extension, ...options], {
     stdio: ['pipe', 'pipe', 'ignore'],
     env: { PATH: process.env.PATH, LANG: 'C.UTF-8' },
   });
@@ -43,7 +49,7 @@ async function parse(stream: Readable, extension: string): Promise<Result> {
         if (bytes > 16 * 1024 * 1024) throw new Error('Output too large');
         chunks.push(chunk);
       }
-      return JSON.parse(Buffer.concat(chunks).toString('utf8')) as Result;
+      return JSON.parse(Buffer.concat(chunks).toString('utf8')) as T;
     };
     const [result] = await Promise.all([
       output(),
@@ -75,7 +81,7 @@ export async function extractNext(
     if (!job) return false;
     let result: Result;
     try {
-      result = await parse(
+      result = await parse<Result>(
         await read(job.key),
         extname(job.name).toLowerCase(),
       );
@@ -86,13 +92,47 @@ export async function extractNext(
       };
     }
     await client.query(
-      `UPDATE doc_artcl_txt SET prcs_stts_cd=$2,src_sctn_list=$3::jsonb,fail_rsn=$4 WHERE artcl_idntfr=$1`,
+      `UPDATE doc_artcl_txt SET prcs_stts_cd=$2,src_sctn_list=$3::jsonb,fail_rsn=$4,thmb_prcs_yn=false WHERE artcl_idntfr=$1`,
       [
         job.id,
         result.status,
         JSON.stringify(result.status === 'failed' ? [] : result.segments),
         result.status === 'failed' ? result.reason : null,
       ],
+    );
+    return true;
+  });
+}
+export async function thumbnailNext(
+  db: pg.Pool,
+  read: (key: string) => Promise<Readable>,
+) {
+  return transaction(db, async (client) => {
+    const {
+      rows: [job],
+    } =
+      await client.query(`SELECT t.artcl_idntfr AS id,a.artcl_nm AS name,a.s3_objt_key AS key,
+      left(t.src_sctn_list->0->>'text',180) AS excerpt FROM doc_artcl_txt t JOIN doc_artcl a USING(artcl_idntfr)
+      WHERE NOT t.thmb_prcs_yn AND t.prcs_stts_cd<>'processing' AND a.del_grp_idntfr IS NULL
+      ORDER BY t.artcl_idntfr LIMIT 1 FOR UPDATE OF t SKIP LOCKED`);
+    if (!job) return false;
+    let image: Buffer | null = null;
+    const ext = extname(job.name).toLowerCase();
+    if (['.pdf', '.epub', '.docx'].includes(ext)) {
+      try {
+        const result = await parse<{ image?: string }>(
+          await read(job.key),
+          ext,
+          '--thumbnail',
+        );
+        if (result.image) image = Buffer.from(result.image, 'base64');
+      } catch {
+        /* A cover is optional; keep the text excerpt and original. */
+      }
+    }
+    await client.query(
+      'UPDATE doc_artcl_txt SET thmb_prcs_yn=true,thmb_img=$2,thmb_cn=$3 WHERE artcl_idntfr=$1',
+      [job.id, image, job.excerpt],
     );
     return true;
   });
@@ -105,6 +145,7 @@ export function startExtraction(
     let more = false;
     try {
       more = await extractNext(db, read);
+      if (await thumbnailNext(db, read)) more = true;
     } catch {
       console.error('Document extraction queue unavailable');
     }

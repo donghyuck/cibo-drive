@@ -69,6 +69,14 @@ export function entryRoutes(db: pg.Pool) {
           [id, name],
         );
       } else if (action === 'move') {
+        if (
+          req.body?.expectedParent !== undefined &&
+          req.body.expectedParent !== item.parent
+        )
+          throw new HttpError(
+            409,
+            '항목의 위치가 바뀌었습니다. 폴더를 다시 열어 확인하세요.',
+          );
         const parent = req.body?.parent;
         if (typeof parent !== 'string')
           throw new HttpError(400, '대상 폴더를 선택하세요.');

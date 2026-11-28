@@ -1,7 +1,7 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import assert from 'node:assert/strict';
-import { extractNext } from './document-text.js';
+import { extractNext, thumbnailNext } from './document-text.js';
 import { Readable } from 'node:stream';
 import { once } from 'node:events';
 import { randomUUID } from 'node:crypto';
@@ -222,7 +222,7 @@ test('team approval, space access and original file lifecycle', async (t) => {
     });
   assert.equal((await upload('invalid.exe', 'sample')).status, 400);
   assert.equal(
-    (await upload('large.txt', 'x'.repeat(10 * 1024 * 1024 + 1))).status,
+    (await upload('large.txt', 'x'.repeat(30 * 1024 * 1024 + 1))).status,
     413,
   );
   s3.middlewareStack.add(
@@ -266,10 +266,19 @@ test('team approval, space access and original file lifecycle', async (t) => {
     { unit: 'line', start: 1, end: 1, text: '첫 문서' },
   ]);
   assert.equal((await upload('회의록.md', '다른 내용')).status, 409);
-  assert.deepEqual(
-    (await (await request('folder?id=' + child, member)).json()).entries,
-    [{ id, name: '회의록.md', folder: false }],
-  );
+  const entries = (await (await request('folder?id=' + child, member)).json())
+    .entries;
+  assert.equal(entries.length, 1);
+  const registered = entries[0].registered_at;
+  assert.ok(Number.isFinite(Date.parse(registered)));
+  assert.deepEqual(entries[0], {
+    id,
+    name: '회의록.md',
+    folder: false,
+    size: Buffer.byteLength(data),
+    registered_at: registered,
+    thumbnail: { image: false, pending: true, excerpt: null },
+  });
   const key = (
     await db.query(
       'SELECT s3_objt_key AS object_key FROM doc_artcl WHERE artcl_idntfr=$1',
@@ -359,8 +368,20 @@ test('team approval, space access and original file lifecycle', async (t) => {
   );
   assert.deepEqual(await search('회의록'), []);
   assert.equal((await search('report_100%'))[0].id, id);
-  assert.equal((await change(id, 'move', { parent })).status, 204);
+  assert.equal(
+    (await change(id, 'move', { parent, expectedParent: root })).status,
+    409,
+  );
+  assert.equal(
+    (await change(id, 'move', { parent, expectedParent: child })).status,
+    204,
+  );
   assert.equal((await folderRows(child)).length, 0);
+  assert.equal(
+    (await folderRows(parent)).find((x: { id: string }) => x.id === id)
+      .registered_at,
+    registered,
+  );
   assert.ok(
     (await folderRows(parent)).some((x: { id: string }) => x.id === id),
   );
@@ -460,7 +481,89 @@ test('team approval, space access and original file lifecycle', async (t) => {
     (await (await request(textUrl, member)).json()).name,
     'Report_100%.md',
   );
+  const epub = await (
+    await import('node:fs/promises')
+  ).readFile(new URL('../fixtures/sample.epub', import.meta.url));
+  const book = await request(
+    'files?' + new URLSearchParams({ parent: child, name: 'sample.EPUB' }),
+    member,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: new Uint8Array(epub),
+    },
+  );
+  assert.equal(book.status, 201);
+  const bookId = (await book.json()).id;
+  const bookPath = 'files/' + bookId;
+  assert.deepEqual(
+    Buffer.from(await (await request(bookPath, member)).arrayBuffer()),
+    epub,
+  );
+  assert.equal(await extractOne(), true);
+  const contents = await (await request(bookPath + '/chapters', member)).json();
+  assert.equal(contents.status, 'ready');
+  assert.deepEqual(
+    contents.chapters.map((c: { title: string }) => c.title),
+    ['Sample', 'Part Two', 'Part Three'],
+  );
+  assert.deepEqual(
+    (await readTool('get_file_metadata', { fileId: bookId })).chapters,
+    contents.chapters,
+  );
+  const bookText = await readTool('read_file_text', {
+    fileId: bookId,
+    offset: contents.chapters[1].offset,
+    limit: 1,
+  });
+  assert.deepEqual(bookText.segments, [
+    {
+      unit: 'chapter',
+      start: 2,
+      end: 2,
+      chapterTitle: 'Part Two',
+      href: 'page.xhtml#end',
+      text: 'Second chapter',
+    },
+  ]);
+  while (
+    await thumbnailNext(
+      db,
+      async (key) =>
+        (
+          await s3.send(
+            new GetObjectCommand({ Bucket: env.S3_BUCKET, Key: key }),
+          )
+        ).Body as Readable,
+    )
+  ) {}
+  const thumb = await request(bookPath + '/thumbnail', member);
+  assert.equal(thumb.headers.get('content-type'), 'image/jpeg');
+  assert.equal(Buffer.from(await thumb.arrayBuffer()).readUInt16BE(0), 0xffd8);
+  await change(bookId, 'trash');
+  assert.equal((await request(bookPath + '/thumbnail', member)).status, 404);
+  assert.equal((await request(bookPath + '/chapters', member)).status, 404);
+  assert.equal(
+    (await call('read_file_text', { fileId: bookId })).isError,
+    true,
+  );
+  await change(bookId, 'restore');
+  const maxBytes = 30 * 1024 * 1024;
+  const exact = await upload('boundary.txt', 'a'.repeat(maxBytes - 1) + 'Z');
+  assert.equal(exact.status, 201);
+  const boundary = await exact.json();
+  const lastByte = await request('files/' + boundary.id + '/preview', member, {
+    headers: { Range: 'bytes=-1' },
+  });
+  assert.equal(lastByte.status, 206);
+  assert.equal(
+    lastByte.headers.get('content-range'),
+    `bytes ${maxBytes - 1}-${maxBytes - 1}/${maxBytes}`,
+  );
+  assert.equal(await lastByte.text(), 'Z');
   await grant('active', 'editor', false);
+  assert.equal((await request(bookPath + '/chapters', member)).status, 403);
+  assert.equal((await request(bookPath + '/thumbnail', member)).status, 403);
   assert.equal(await mcpStatus(headers), 403);
   assert.equal((await request(textUrl, member)).status, 403);
   assert.equal(

@@ -7,7 +7,13 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { z } from 'zod';
 import { HttpError, transaction } from './drive-db.js';
-import { listFolder, searchFiles, readText, tree } from './drive-reads.js';
+import {
+  listFolder,
+  searchFiles,
+  readText,
+  tree,
+  bookContents,
+} from './drive-reads.js';
 import type { Settings } from './drive.js';
 
 const digest = (value: string) =>
@@ -178,13 +184,16 @@ function userServer({ db, origin, s3, bucket }: Settings, space: number) {
           new HeadObjectCommand({ Bucket: bucket, Key: file.key }),
         );
         return {
+          ...(extname(file.name).toLowerCase() === '.epub'
+            ? { chapters: (await bookContents(db, space, fileId)).chapters }
+            : {}),
           fileId,
           name: file.name,
           path: file.path,
           type: extname(file.name).slice(1).toLowerCase(),
           size: head.ContentLength,
           modified_at: file.modified_at,
-          extraction_status: file.extraction_status,
+          extraction_status: file.extraction_status ?? 'unsupported',
           downloadUrl: new URL('/api/files/' + fileId, origin).href,
         };
       }),
@@ -193,7 +202,7 @@ function userServer({ db, origin, s3, bucket }: Settings, space: number) {
     'read_file_text',
     {
       description:
-        'Read extracted document text with page, paragraph or line references. Continue with nextOffset.',
+        'Read extracted document text with page, paragraph, line or EPUB chapter references. Continue with nextOffset.',
       inputSchema: {
         fileId: z.uuid(),
         offset: z.number().int().min(0).max(8192).default(0),

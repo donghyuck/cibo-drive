@@ -1,14 +1,18 @@
 """Read one immutable original from stdin; stdout is a bounded JSON result."""
+import os
 import io
 import json
 import resource
 import sys
 import zipfile
 
+# -I excludes the script directory; only load sibling modules from this installation.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from ebook import chapters
 from defusedxml import ElementTree as ET
 from pypdf import PdfReader
 
-MAX_INPUT = 10 * 1024 * 1024
+MAX_INPUT = 30 * 1024 * 1024
 MAX_XML = 8 * 1024 * 1024
 
 
@@ -17,7 +21,9 @@ class DocumentError(Exception):
 
 
 def locations(data, extension):
-    if extension == ".pdf":
+    if extension == ".epub":
+        yield from chapters(data)
+    elif extension == ".pdf":
         reader = PdfReader(io.BytesIO(data))
         if reader.is_encrypted:
             raise DocumentError("암호화된 PDF입니다.")
@@ -66,7 +72,7 @@ def locations(data, extension):
 def extract(data, extension):
     segments = []
     chars = 0
-    for unit, number, raw in locations(data, extension):
+    for unit, number, raw, *source in locations(data, extension):
         value = raw.replace("\x00", "")
         if not value.strip():
             continue
@@ -83,7 +89,7 @@ def extract(data, extension):
             else:
                 if len(segments) >= 8192:
                     raise DocumentError("추출 가능한 출처 구간 수를 초과했습니다.")
-                segments.append(dict(unit=unit, start=number, end=number, text=piece))
+                segments.append(dict(unit=unit, start=number, end=number, text=piece, **(source[0] if source else {})))
     return {"status": "ready" if segments else "empty", "segments": segments}
 
 
@@ -95,7 +101,11 @@ if __name__ == "__main__":
         data = sys.stdin.buffer.read(MAX_INPUT + 1)
         if len(data) > MAX_INPUT:
             raise DocumentError("원본 크기 제한을 초과했습니다.")
-        result = extract(data, sys.argv[1])
+        if "--thumbnail" in sys.argv:
+            from thumbnail import thumbnail
+            result = {"image": thumbnail(data, sys.argv[1])}
+        else:
+            result = extract(data, sys.argv[1])
     except DocumentError as error:
         result = {"status": "failed", "reason": str(error)}
     except Exception:
