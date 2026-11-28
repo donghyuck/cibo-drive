@@ -38,7 +38,15 @@ try {
   ).rows.map((r) => r.tablename);
   if (
     names.sort().join() !==
-    [...Object.keys(tables), 'lgn_ssn', 'mcp_acs_tkn'].sort().join()
+    [
+      ...Object.keys(tables).filter(
+        (name) => name !== 'doc_sctn_idx' || names.includes(name),
+      ),
+      'lgn_ssn',
+      'mcp_acs_tkn',
+    ]
+      .sort()
+      .join()
   )
     throw new Error('Review public table coverage before backup');
   const state = await metadata(db);

@@ -47,6 +47,7 @@ export const tables = {
   doc_space_acs_authrt: 'acnt_idntfr',
   doc_artcl: 'artcl_idntfr',
   doc_artcl_txt: 'artcl_idntfr',
+  doc_sctn_idx: 'artcl_idntfr,sctn_sn',
   chg_hstry: 'chg_hstry_sn',
 };
 // Hash canonical per-row digests in primary-key order. Payloads, including
@@ -55,6 +56,13 @@ export async function metadata(db) {
   await db.query("SET TIME ZONE 'UTC'");
   const result = {};
   for (const [name, pk] of Object.entries(tables)) {
+    // Older archives predate the passage-vector table.
+    if (
+      name === 'doc_sctn_idx' &&
+      !(await db.query("SELECT to_regclass('public.doc_sctn_idx') AS id"))
+        .rows[0].id
+    )
+      continue;
     const {
       rows: [row],
     } = await db.query(`SELECT count(*)::int AS count,

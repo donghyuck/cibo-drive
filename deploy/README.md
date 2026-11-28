@@ -118,3 +118,8 @@ docker compose -f compose.yml exec -T api node apps/api/dist/check-infra.js
 업데이트 전 쓰기를 멈추려면 앱 서버에서 `docker compose -f compose.yml stop web api objects`를 실행한다. DB 서버에서 전용 DB의 `pg_dump -Fc` 백업을 만들고, 같은 시점의 SeaweedFS 데이터 디렉터리 전체를 백업한다. 자격증명과 Caddy 인증서 볼륨도 별도로 보호한다. 사본은 서버 밖에 보관하고 별도 환경에서 DB와 원본을 함께 복원해 파일 다운로드를 확인한다.
 
 새 버전은 3단계에서 새 태그로 빌드해 전송한 뒤 서버에서 `docker load`하고, 기존 `.env`의 이미지 태그만 바꿔 4단계의 기동·검증 명령을 실행한다. DB 마이그레이션이 있는 버전을 되돌릴 때는 구버전과 호환되는 DB·원본 백업 시점을 맞춘다.
+
+
+### 문단 임베딩 운영
+
+1GB VM은 원격 모델 서버를 호출합니다. 배포 환경의 `CIBO_EMBED_MODEL`, `CIBO_EMBED_URL`, `CIBO_EMBED_DIMENSIONS`, `CIBO_EMBED_API_KEY`를 [색인 설정](../README.md#문단-임베딩과-자동-색인)에 맞춰 지정합니다. 배포 이미지에서는 `docker compose exec api node apps/api/dist/index-jobs.js failed`로 실패 목록을 확인하고 `docker compose exec api node apps/api/dist/index-jobs.js retry <파일 UUID>`로 재시도합니다.

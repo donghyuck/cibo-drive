@@ -55,5 +55,12 @@
 | 신규 컬럼 | — | `doc_artcl_txt.fail_rsn` | 등록 용어 실패사유 · FAIL_RSN |
 | 신규 컬럼 | — | `doc_artcl.del_dt` | 삭제일시 · DEL_DT · 논리 삭제 시각 |
 | 신규 컬럼 | — | `doc_artcl.del_grp_idntfr` | 프로젝트 조합 · 삭제 + 그룹 + 식별자 · 함께 복원하는 하위 트리 루트 ID |
+| 신규 컬럼 | — | `doc_artcl_txt.idx_stts_cd` | 프로젝트 조합 · 색인 상태 코드 |
+| 신규 컬럼 | — | `doc_artcl_txt.idx_mdl_nm` | 프로젝트 조합 · 색인 모델명과 차원 |
+| 신규 컬럼 | — | `doc_artcl_txt.idx_fail_rsn` | 프로젝트 조합 · 색인 실패 사유 |
+| 신규 테이블 | — | `doc_sctn_idx` | 프로젝트 조합 · 문서 구간 색인 |
+| 신규 컬럼 | — | `doc_sctn_idx.artcl_idntfr` | 원본 문서 항목 식별자 |
+| 신규 컬럼 | — | `doc_sctn_idx.sctn_sn` | 구간 순번 · 0부터 시작 |
+| 신규 컬럼 | — | `doc_sctn_idx.emb_vctr` | 프로젝트 용어 · 임베딩 벡터 |
 
 `space`는 팀의 문서 공간을 가리키는 프로젝트 단어다. OIDC의 발급자·사용자 클레임, 세션 토큰의 해시 알고리즘, S3 객체 키는 연동 규격상의 의미를 보존한다. 내부 계정 UUID에는 식별자(IDNTFR)를 사용한다. 파일·폴더 항목명은 기존 최대 200자 정책을 유지하므로 명V100과 길이가 다르다. 계정 상태·역할의 실제 코드값은 프로젝트에서 관리한다.

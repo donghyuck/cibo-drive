@@ -2,6 +2,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import assert from 'node:assert/strict';
 import { extractNext, thumbnailNext } from './document-text.js';
+import { embeddingProvider, indexNext, retryIndex } from './embeddings.js';
 import { rebuildPassages } from './passages.js';
 import { Readable } from 'node:stream';
 import { once } from 'node:events';
@@ -293,6 +294,33 @@ test('team approval, space access and original file lifecycle', async (t) => {
   );
   assert.equal(await rebuildPassages(db, id), true);
   assert.deepEqual(await passages(), expectedPassages);
+  // Enable indexing after the first file already has passages.
+  const provider = env.CIBO_TEST_EMBED_URL
+    ? embeddingProvider({
+        CIBO_EMBED_URL: env.CIBO_TEST_EMBED_URL,
+        CIBO_EMBED_MODEL: env.CIBO_TEST_EMBED_MODEL,
+        CIBO_EMBED_DIMENSIONS: env.CIBO_TEST_EMBED_DIMENSIONS,
+      })!
+    : {
+        model: 'fixture@2',
+        embed: async (texts: string[]) => texts.map((text) => [text.length, 1]),
+      };
+  const vectorsFor = async (fileId: string) =>
+    (
+      await db.query(
+        'SELECT sctn_sn,emb_vctr FROM doc_sctn_idx WHERE artcl_idntfr=$1 ORDER BY sctn_sn',
+        [fileId],
+      )
+    ).rows;
+  assert.deepEqual(
+    (
+      await Promise.all([indexNext(db, provider), indexNext(db, provider)])
+    ).sort(),
+    [false, true],
+  );
+  const initialIndex = await vectorsFor(id);
+  assert.equal(initialIndex.length, 1);
+  assert.equal(await retryIndex(db, id), false);
   assert.equal((await upload('회의록.md', '다른 내용')).status, 409);
   const entries = (await (await request('folder?id=' + child, member)).json())
     .entries;
@@ -546,6 +574,72 @@ test('team approval, space access and original file lifecycle', async (t) => {
     epub,
   );
   assert.equal(await extractOne(), true);
+  // First confirm this upload is indexed without an explicit file ID.
+  assert.equal(await indexNext(db, provider), true);
+  assert.ok((await vectorsFor(bookId)).length >= 3);
+  // Exercise a partially completed multi-batch file with short fixture text.
+  await db.query(
+    `UPDATE doc_artcl_txt SET srch_sctn_list=(
+    SELECT jsonb_agg(srch_sctn_list->(i%3) ORDER BY i) FROM generate_series(0,9) i
+  ) WHERE artcl_idntfr=$1`,
+    [bookId],
+  );
+  assert.equal(await indexNext(db, provider), true);
+  assert.equal((await vectorsFor(bookId)).length, 8);
+  // Fail only this new upload, then rebuild its passages while a retry is in flight.
+  const fail = {
+    ...provider,
+    embed: async () => {
+      throw new Error('Embedding HTTP 429');
+    },
+  };
+  assert.equal(await indexNext(db, fail), true);
+  assert.equal(await indexNext(db, provider), false);
+  assert.equal(await retryIndex(db, bookId), true);
+  let entered!: () => void, resume!: () => void;
+  const started = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const gate = new Promise<void>((resolve) => {
+    resume = resolve;
+  });
+  const retrying = indexNext(db, {
+    ...provider,
+    embed: async (texts) => {
+      entered();
+      await gate;
+      assert.equal(texts.length, 2);
+      return provider.embed(texts);
+    },
+  });
+  await started;
+  const changed = db.query(
+    'UPDATE doc_artcl_txt SET srch_sctn_list=jsonb_build_array(srch_sctn_list->1) WHERE artcl_idntfr=$1',
+    [bookId],
+  );
+  resume();
+  await Promise.all([retrying, changed]);
+  assert.deepEqual(await vectorsFor(bookId), []);
+  assert.equal(await indexNext(db, provider), true);
+  const latest = await vectorsFor(bookId);
+  const latestText = (
+    await db.query(
+      "SELECT srch_sctn_list->0->>'text' AS text,idx_stts_cd FROM doc_artcl_txt WHERE artcl_idntfr=$1",
+      [bookId],
+    )
+  ).rows[0];
+  assert.equal(latestText.idx_stts_cd, 'ready');
+  const [expectedVector] = await provider.embed([latestText.text]);
+  assert.equal(latest.length, 1);
+  assert.equal(latest[0].sctn_sn, 0);
+  assert.equal(latest[0].emb_vctr.length, expectedVector.length);
+  assert.ok(
+    latest[0].emb_vctr.every(
+      (v: number, i: number) => Math.abs(v - expectedVector[i]) < 0.0001,
+    ),
+  );
+  assert.deepEqual(await vectorsFor(id), initialIndex);
+  assert.equal(await indexNext(db, provider), false);
   const contents = await (await request(bookPath + '/chapters', member)).json();
   assert.equal(contents.status, 'ready');
   assert.deepEqual(
