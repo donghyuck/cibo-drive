@@ -19,3 +19,5 @@
 apps/api/extraction/**
 !apps/api/extraction/extract.py
 !apps/api/extraction/requirements.txt
+!apps/api/extraction/ebook.py
+!apps/api/extraction/thumbnail.py

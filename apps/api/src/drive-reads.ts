@@ -26,10 +26,11 @@ export async function listFolder(
   id?: unknown,
   limit: number | null = null,
   offset = 0,
+  cards = false,
 ) {
   const current = await folder(db, id, space);
   const { rows: entries } = await db.query(
-    `SELECT ${fields} FROM doc_artcl WHERE up_artcl_idntfr=$1 AND doc_space_idntfr=$2 AND del_grp_idntfr IS NULL ORDER BY folder DESC,artcl_nm,artcl_idntfr LIMIT $3 OFFSET $4`,
+    `SELECT ${fields} ${cards ? ",(SELECT jsonb_build_object('image',t.thmb_img IS NOT NULL,'excerpt',t.thmb_cn,'pending',NOT t.thmb_prcs_yn) FROM doc_artcl_txt t WHERE t.artcl_idntfr=doc_artcl.artcl_idntfr) AS thumbnail" : ''} FROM doc_artcl WHERE up_artcl_idntfr=$1 AND doc_space_idntfr=$2 AND del_grp_idntfr IS NULL ORDER BY folder DESC,artcl_nm,artcl_idntfr LIMIT $3 OFFSET $4`,
     [current.id, space, limit, offset],
   );
   return { current, entries };
@@ -77,4 +78,21 @@ export async function readText(
     offset,
     nextOffset: offset + limit < row.total ? offset + limit : null,
   };
+}
+
+export async function bookContents(db: pg.Pool, space: number, id: string) {
+  const {
+    rows: [book],
+  } = await db.query(
+    `SELECT t.prcs_stts_cd AS status,t.fail_rsn AS reason,
+    ARRAY(SELECT jsonb_build_object('number',n,'title',title,'href',href,'offset',first,'count',cnt)
+      FROM (SELECT (s->>'start')::int n,s->>'chapterTitle' title,s->>'href' href,min(ord)-1 first,count(*) cnt
+        FROM jsonb_array_elements(t.src_sctn_list) WITH ORDINALITY AS sections(s,ord)
+        WHERE s->>'unit'='chapter' GROUP BY 1,2,3) chapters ORDER BY n) AS chapters
+    FROM doc_artcl a JOIN doc_artcl_txt t USING(artcl_idntfr)
+    WHERE a.artcl_idntfr=$1 AND a.doc_space_idntfr=$2 AND a.del_grp_idntfr IS NULL AND lower(a.artcl_nm) LIKE '%.epub'`,
+    [id, space],
+  );
+  if (!book) throw new HttpError(404, '책을 찾을 수 없습니다.');
+  return book;
 }

@@ -78,6 +78,20 @@ export async function migrate(db: pg.Pool) {
           'utf8',
         ),
       );
+    if (
+      !(
+        await client.query(
+          "SELECT 1 FROM pg_attribute WHERE attrelid='doc_artcl_txt'::regclass AND attname='thmb_img' AND NOT attisdropped",
+        )
+      ).rowCount
+    ) {
+      await client.query(
+        await readFile(
+          new URL('../migrations/007-book-thumbnails.sql', import.meta.url),
+          'utf8',
+        ),
+      );
+    }
     // Preserve account IDs, memberships and history from earlier M1 builds.
     await client.query(`UPDATE user_acnt SET oidc_issuer='https://accounts.google.com'
       WHERE oidc_issuer='https://user_acnt.google.com'`);

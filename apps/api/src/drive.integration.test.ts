@@ -1,7 +1,7 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import assert from 'node:assert/strict';
-import { extractNext } from './document-text.js';
+import { extractNext, thumbnailNext } from './document-text.js';
 import { Readable } from 'node:stream';
 import { once } from 'node:events';
 import { randomUUID } from 'node:crypto';
@@ -277,6 +277,7 @@ test('team approval, space access and original file lifecycle', async (t) => {
     folder: false,
     size: Buffer.byteLength(data),
     registered_at: registered,
+    thumbnail: { image: false, pending: true, excerpt: null },
   });
   const key = (
     await db.query(
@@ -486,14 +487,60 @@ test('team approval, space access and original file lifecycle', async (t) => {
     },
   );
   assert.equal(book.status, 201);
-  const bookPath = 'files/' + (await book.json()).id;
+  const bookId = (await book.json()).id;
+  const bookPath = 'files/' + bookId;
   assert.deepEqual(
     Buffer.from(await (await request(bookPath, member)).arrayBuffer()),
     epub,
   );
-  const bookText = await (await request(bookPath + '/text', member)).json();
-  assert.equal(bookText.status, 'unsupported');
-  assert.deepEqual(bookText.segments, []);
+  assert.equal(await extractOne(), true);
+  const contents = await (await request(bookPath + '/chapters', member)).json();
+  assert.equal(contents.status, 'ready');
+  assert.deepEqual(
+    contents.chapters.map((c: { title: string }) => c.title),
+    ['Sample', 'Part Two', 'Part Three'],
+  );
+  assert.deepEqual(
+    (await readTool('get_file_metadata', { fileId: bookId })).chapters,
+    contents.chapters,
+  );
+  const bookText = await readTool('read_file_text', {
+    fileId: bookId,
+    offset: contents.chapters[1].offset,
+    limit: 1,
+  });
+  assert.deepEqual(bookText.segments, [
+    {
+      unit: 'chapter',
+      start: 2,
+      end: 2,
+      chapterTitle: 'Part Two',
+      href: 'page.xhtml#end',
+      text: 'Second chapter',
+    },
+  ]);
+  while (
+    await thumbnailNext(
+      db,
+      async (key) =>
+        (
+          await s3.send(
+            new GetObjectCommand({ Bucket: env.S3_BUCKET, Key: key }),
+          )
+        ).Body as Readable,
+    )
+  ) {}
+  const thumb = await request(bookPath + '/thumbnail', member);
+  assert.equal(thumb.headers.get('content-type'), 'image/jpeg');
+  assert.equal(Buffer.from(await thumb.arrayBuffer()).readUInt16BE(0), 0xffd8);
+  await change(bookId, 'trash');
+  assert.equal((await request(bookPath + '/thumbnail', member)).status, 404);
+  assert.equal((await request(bookPath + '/chapters', member)).status, 404);
+  assert.equal(
+    (await call('read_file_text', { fileId: bookId })).isError,
+    true,
+  );
+  await change(bookId, 'restore');
   const maxBytes = 30 * 1024 * 1024;
   const exact = await upload('boundary.txt', 'a'.repeat(maxBytes - 1) + 'Z');
   assert.equal(exact.status, 201);
@@ -508,6 +555,8 @@ test('team approval, space access and original file lifecycle', async (t) => {
   );
   assert.equal(await lastByte.text(), 'Z');
   await grant('active', 'editor', false);
+  assert.equal((await request(bookPath + '/chapters', member)).status, 403);
+  assert.equal((await request(bookPath + '/thumbnail', member)).status, 403);
   assert.equal(await mcpStatus(headers), 403);
   assert.equal((await request(textUrl, member)).status, 403);
   assert.equal(

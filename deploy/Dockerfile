@@ -17,7 +17,7 @@ RUN npm run build -w @cibo/api
 
 FROM manifests AS api
 RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-venv && rm -rf /var/lib/apt/lists/*
-COPY apps/api/extraction/requirements.txt apps/api/extraction/extract.py apps/api/extraction/
+COPY apps/api/extraction/requirements.txt apps/api/extraction/extract.py apps/api/extraction/ebook.py apps/api/extraction/thumbnail.py apps/api/extraction/
 RUN python3 -m venv apps/api/extraction/.venv && apps/api/extraction/.venv/bin/pip install --no-cache-dir -r apps/api/extraction/requirements.txt
 ENV NODE_ENV=production
 RUN npm ci --workspace @cibo/api --omit=dev --no-audit --no-fund && npm cache clean --force

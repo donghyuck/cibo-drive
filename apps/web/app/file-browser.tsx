@@ -32,6 +32,11 @@ export type Folder = {
     folder: boolean;
     size: number | null;
     registered_at: string | null;
+    thumbnail?: {
+      image: boolean;
+      excerpt: string | null;
+      pending: boolean;
+    } | null;
   }[];
 };
 function fileSize(bytes: number | null) {
@@ -88,6 +93,24 @@ export function FileBrowser({
   const dialog = useRef<HTMLDialogElement>(null);
   const pending = useRef(false);
   const current = folder.current;
+  useEffect(() => {
+    if (!folder.entries.some((e) => e.thumbnail?.pending)) return;
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      api('folder?id=' + encodeURIComponent(folder.current.id), {
+        signal: controller.signal,
+      })
+        .then((next) => {
+          if (!controller.signal.aborted)
+            setFolder((old) => (old === folder ? next : old));
+        })
+        .catch(() => {});
+    }, 5000);
+    return () => {
+      controller.abort();
+      clearTimeout(timer);
+    };
+  }, [folder]);
   async function perform(work: () => Promise<void>) {
     if (pending.current) return;
     pending.current = true;
@@ -357,11 +380,26 @@ export function FileBrowser({
                             : 'doc')
                       }
                     >
-                      {item.folder ? <FolderIcon /> : <FileText />}
-                      {grid && (
+                      {item.thumbnail?.image ? (
+                        <img
+                          className="art-thumbnail"
+                          alt=""
+                          loading="lazy"
+                          src={'/api/files/' + item.id + '/thumbnail'}
+                        />
+                      ) : item.folder ? (
+                        <FolderIcon />
+                      ) : (
+                        <FileText />
+                      )}
+                      {grid && !item.thumbnail?.image && (
                         <span className="cover-glyph" aria-hidden="true">
                           {item.folder ? (
                             <FolderIcon />
+                          ) : item.thumbnail?.excerpt ? (
+                            <span className="excerpt-thumb">
+                              {item.thumbnail.excerpt}
+                            </span>
                           ) : (
                             <span className="sheet">
                               <b>{type}</b>

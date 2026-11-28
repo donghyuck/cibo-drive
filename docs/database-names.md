@@ -44,6 +44,9 @@
 | 신규 컬럼 | — | `mcp_acs_tkn.tkn_sha256` | 프로젝트 조합 · 토큰 + SHA-256 |
 | 신규 컬럼 | — | `mcp_acs_tkn.reg_dt` | 등록일시 · REG_DT |
 | 신규 컬럼 | — | `mcp_acs_tkn.expry_dt` | 만료일시 · EXPRY_DT |
+| 신규 컬럼 | — | `doc_artcl_txt.thmb_img` | 프로젝트 용어 · 목록용 축소 이미지 |
+| 신규 컬럼 | — | `doc_artcl_txt.thmb_cn` | 프로젝트 용어 · 목록용 본문 발췌 |
+| 신규 컬럼 | — | `doc_artcl_txt.thmb_prcs_yn` | 프로젝트 용어 · 썸네일 처리 여부 |
 | 신규 테이블 | — | `doc_artcl_txt` | 표준단어 조합 · 문서 + 항목 + 텍스트 |
 | 신규 컬럼 | — | `doc_artcl_txt.artcl_idntfr` | 문서 항목 식별자 · 원본 파일 외래 키 |
 | 신규 컬럼 | — | `doc_artcl_txt.prcs_stts_cd` | 표준단어 조합 · 처리 + 상태 + 코드 |

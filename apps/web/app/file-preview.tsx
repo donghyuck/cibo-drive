@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ArrowDownToLine, Maximize2, Minimize2, X } from 'lucide-react';
 import { DocumentSources } from './document-sources';
+import { EpubReader } from './epub-reader';
 import dynamic from 'next/dynamic';
 
 const Markdown = dynamic(() => import('react-markdown'));
@@ -164,7 +165,7 @@ export function FilePreview({
         ) : preview.kind === 'error' ? (
           <p role="alert">{preview.message}</p>
         ) : preview.kind === 'epub' ? (
-          <p>원본을 다운로드해 EPUB 리더에서 열어보세요.</p>
+          <EpubReader fileId={file.id} writable={writable} />
         ) : preview.kind === 'pdf' ? (
           <object
             type="application/pdf"
