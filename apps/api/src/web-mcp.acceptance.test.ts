@@ -1,5 +1,4 @@
-// Acceptance test for #10: real exported web UI, HTTP API, MCP transport,
-// PostgreSQL and S3. Only Google identity verification is replaced.
+// Exercise file links and evidence search through the web UI and MCP transport.
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { test } from 'node:test';
@@ -19,6 +18,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { driveRouter } from './drive.js';
 import { migrate } from './database.js';
+import { embeddingProvider, indexNext } from './embeddings.js';
 import { extractNext } from './document-text.js';
 
 test(
@@ -87,6 +87,13 @@ test(
         }),
     );
     const origin = 'http://127.0.0.1:' + (server.address() as AddressInfo).port;
+    const embeddings = embeddingProvider({
+      ...env,
+      CIBO_EMBED_MODEL: env.CIBO_ACCEPTANCE_EMBED_MODEL,
+    }) ?? {
+      model: 'acceptance@2',
+      embed: async (texts: string[]) => texts.map((text) => [text.length, 1]),
+    };
     app.use(
       '/api',
       driveRouter({
@@ -94,6 +101,7 @@ test(
         db,
         s3,
         bucket,
+        embeddings,
         clientId: 'fixture',
         masterSubject: 'owner',
         verify: async (credential) => {
@@ -168,6 +176,7 @@ test(
         (await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key })))
           .Body as Readable,
     );
+    assert.equal(await indexNext(db, embeddings), true);
     await button(editor, '새 폴더').click();
     await editor.getByLabel('폴더 이름').fill(destination);
     await button(editor, '만들기').click();
@@ -179,6 +188,12 @@ test(
     await mcp.connect(
       new StreamableHTTPClientTransport(new URL(origin + '/api/mcp'), {
         requestInit: { headers: { Authorization: 'Bearer ' + token } },
+        fetch: async (url, init) => {
+          const response = await fetch(url, init);
+          if (response.status === 403)
+            assert.equal(await response.clone().text(), 'Forbidden');
+          return response;
+        },
       }),
     );
     t.after(() => mcp.close());
@@ -197,12 +212,50 @@ test(
     const folderId = root.find(
       (i: { name: string }) => i.name === destination,
     ).id;
-    const link = meta.downloadUrl,
+    const question = { question: '인수시험에서 무엇을 확인하나요?' };
+    const search = () => read('search_passages', question);
+    const initial = await search();
+    assert.equal(initial.results.length, 1);
+    const [hit] = initial.results;
+    assert.equal(hit.fileId, id);
+    assert.equal(hit.name, existing);
+    assert.deepEqual(
+      [hit.unit, hit.start, hit.end, hit.text],
+      ['line', 1, 1, bytes.toString()],
+    );
+    assert.equal(hit.downloadUrl, meta.downloadUrl);
+    const link = hit.downloadUrl,
       preview = link + '/preview',
       text = link + '/text';
     const get = (url: string, range = false) =>
       editor.request.get(url, { headers: range ? { Range: 'bytes=0-2' } : {} });
-    async function accessible() {
+    async function indexState() {
+      return (
+        await db.query(
+          `SELECT t.idx_stts_cd, t.idx_mdl_nm, t.srch_sctn_list, i.sctn_sn, i.emb_vctr
+         FROM doc_artcl_txt t JOIN doc_sctn_idx i USING (artcl_idntfr)
+         WHERE t.artcl_idntfr=$1 ORDER BY i.sctn_sn`,
+          [id],
+        )
+      ).rows;
+    }
+    const indexed = await indexState();
+    assert.equal(indexed.length, 1);
+    assert.equal(indexed[0].idx_stts_cd, 'ready');
+    assert.equal(indexed[0].idx_mdl_nm, embeddings.model);
+    assert.ok(indexed[0].emb_vctr.length > 0);
+    async function accessible(expectedName = renamed) {
+      const { results } = await search();
+      assert.equal(results.length, 1);
+      assert.deepEqual(
+        [
+          results[0].fileId,
+          results[0].name,
+          results[0].text,
+          results[0].downloadUrl,
+        ],
+        [id, expectedName, bytes.toString(), link],
+      );
       const original = await get(link);
       assert.equal(original.status(), 200);
       assert.deepEqual(await original.body(), bytes);
@@ -217,16 +270,26 @@ test(
       );
     }
     async function blockedLinks(status: number) {
+      assert.deepEqual(await indexState(), indexed);
       for (const response of await Promise.all([
         get(link),
         get(preview, true),
         get(text),
-      ]))
+      ])) {
         assert.equal(response.status(), status);
+        assert.equal(response.headers()['content-disposition'], undefined);
+        assert.deepEqual(await response.json(), {
+          error:
+            status === 404
+              ? '파일을 찾을 수 없습니다.'
+              : '문서 공간 권한이 필요합니다.',
+        });
+      }
     }
     async function blockedAccount() {
       await blockedLinks(403);
       for (const [name, args] of [
+        ['search_passages', question],
         ['list_folder', { folderId }],
         ['search_files', { query: renamed }],
         ['get_file_metadata', { fileId: id }],
@@ -239,7 +302,7 @@ test(
       ])
         assert.equal((await get(origin + '/api/' + path)).status(), 403);
     }
-    await accessible();
+    await accessible(existing);
     await button(editor, '팀 문서 공간').click();
     await button(editor, existing + ' 관리').click();
     await editor.getByLabel('새 이름').fill(renamed);
@@ -285,6 +348,12 @@ test(
       .click();
     await button(editor, '휴지통으로 이동').click();
     await button(editor, renamed + ' 미리보기').waitFor({ state: 'hidden' });
+    const hidden = await call('search_passages', question);
+    assert.ok(!hidden.isError);
+    assert.deepEqual(hidden.content, [
+      { type: 'text', text: JSON.stringify({ results: [] }) },
+    ]);
+    assert.equal(hidden.structuredContent, undefined);
     await blockedLinks(404);
     assert.deepEqual((await read('list_folder', { folderId })).entries, []);
     assert.deepEqual(
