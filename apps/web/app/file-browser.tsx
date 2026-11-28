@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type DragEvent } from 'react';
 import {
   Eye,
   Ellipsis,
@@ -9,7 +9,8 @@ import {
   FileText,
   Folder as FolderIcon,
   FolderPlus,
-  HardDrive,
+  Home,
+  ArrowUp,
   LayoutGrid,
   Layers3,
   List,
@@ -18,6 +19,7 @@ import {
   X,
 } from 'lucide-react';
 import { EntryTools, SpaceLookup, type DriveItem } from './entry-tools';
+import { MoveConfirmation, type MoveRequest } from './move-confirmation';
 import { FilePreview } from './file-preview';
 import { api, post } from './drive-api';
 
@@ -87,6 +89,9 @@ export function FileBrowser({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const internalDrag = useRef<DriveItem | null>(null);
+  const [overId, setOverId] = useState<string | null>(null);
+  const [move, setMove] = useState<MoveRequest | null>(null);
   const [dragging, setDragging] = useState(false);
   const [name, setName] = useState('');
   const picker = useRef<HTMLInputElement>(null);
@@ -139,6 +144,62 @@ export function FileBrowser({
       setQuery('');
       setFilter('전체');
     });
+  }
+  function dragStart(e: DragEvent, item: DriveItem) {
+    if (!writable || busy) {
+      e.preventDefault();
+      return;
+    }
+    internalDrag.current = item;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('application/x-cibo-item', item.id);
+  }
+  function endDrag() {
+    internalDrag.current = null;
+    setOverId(null);
+  }
+  function dropTarget(id: string, path: string) {
+    const valid = (e: DragEvent) =>
+      writable &&
+      !busy &&
+      internalDrag.current !== null &&
+      id !== current.id &&
+      id !== internalDrag.current.id &&
+      e.dataTransfer.types.includes('application/x-cibo-item');
+    return {
+      'data-drop-active': overId === id || undefined,
+      onDragOver: (e: DragEvent) => {
+        if (!valid(e)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        e.dataTransfer.dropEffect = 'move';
+        setOverId(id);
+      },
+      onDragLeave: (e: DragEvent) => {
+        if (
+          !(e.relatedTarget instanceof Node) ||
+          !e.currentTarget.contains(e.relatedTarget)
+        )
+          setOverId((old) => (old === id ? null : old));
+      },
+      onDrop: (e: DragEvent) => {
+        if (!valid(e)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const item = internalDrag.current!;
+        if (e.dataTransfer.getData('application/x-cibo-item') === item.id) {
+          setMove({
+            item,
+            source: {
+              id: current.id,
+              path: trail.map((t) => t.name).join(' / '),
+            },
+            destination: { id, path },
+          });
+        }
+        endDrag();
+      },
+    };
   }
   function upload(files: File[]) {
     if (!writable || !files.length) return;
@@ -238,14 +299,53 @@ export function FileBrowser({
       </header>
       <div className="content">
         <nav className="crumbs" aria-label="폴더 경로">
-          <HardDrive size={16} />
+          <button
+            className="path-shortcut"
+            disabled={busy || !current.parent_id}
+            onClick={() => navigate(initial.current.id)}
+            {...dropTarget(initial.current.id, trail[0].name)}
+          >
+            <Home />
+            최상위로
+          </button>
+          <button
+            className="path-shortcut"
+            disabled={busy || !current.parent_id}
+            onClick={() => {
+              if (current.parent_id) navigate(current.parent_id);
+            }}
+            {...(current.parent_id
+              ? dropTarget(
+                  current.parent_id,
+                  trail
+                    .slice(0, -1)
+                    .map((t) => t.name)
+                    .join(' / '),
+                )
+              : {})}
+          >
+            <ArrowUp />한 단계 위로
+          </button>
+          <span className="crumb-divider" aria-hidden="true">
+            /
+          </span>
           {trail.map((part, i) => (
             <span key={part.id}>
               {i > 0 && <ChevronRight size={14} />}{' '}
               {i === trail.length - 1 ? (
                 <span aria-current="page">{part.name}</span>
               ) : (
-                <button disabled={busy} onClick={() => navigate(part.id)}>
+                <button
+                  disabled={busy}
+                  onClick={() => navigate(part.id)}
+                  {...dropTarget(
+                    part.id,
+                    trail
+                      .slice(0, i + 1)
+                      .map((t) => t.name)
+                      .join(' / '),
+                  )}
+                >
                   {part.name}
                 </button>
               )}
@@ -384,6 +484,7 @@ export function FileBrowser({
                         <img
                           className="art-thumbnail"
                           alt=""
+                          draggable={false}
                           loading="lazy"
                           src={'/api/files/' + item.id + '/thumbnail'}
                         />
@@ -448,14 +549,29 @@ export function FileBrowser({
                 return (
                   <li
                     key={item.id}
+                    {...(item.folder
+                      ? dropTarget(
+                          item.id,
+                          [...trail.map((t) => t.name), item.name].join(' / '),
+                        )
+                      : {})}
                     className={writable ? 'manageable' : undefined}
                   >
                     {item.folder ? (
-                      <button disabled={busy} onClick={() => navigate(item.id)}>
+                      <button
+                        draggable={writable && !busy}
+                        onDragStart={(e) => dragStart(e, item)}
+                        onDragEnd={endDrag}
+                        disabled={busy}
+                        onClick={() => navigate(item.id)}
+                      >
                         {inside}
                       </button>
                     ) : (
                       <button
+                        draggable={writable && !busy}
+                        onDragStart={(e) => dragStart(e, item)}
+                        onDragEnd={endDrag}
                         aria-label={item.name + ' 미리보기'}
                         onClick={() => setPreview(item)}
                       >
@@ -516,6 +632,19 @@ export function FileBrowser({
           </div>
         )}
       </div>
+      {move && (
+        <MoveConfirmation
+          move={move}
+          cancel={() => setMove(null)}
+          moved={() => {
+            setMove(null);
+            void perform(async () => {
+              setFolder(await read(current.id));
+              setNotice(move.item.name + ' 항목을 이동했습니다.');
+            });
+          }}
+        />
+      )}
       {lookup && (
         <SpaceLookup
           mode={lookup}

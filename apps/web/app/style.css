@@ -1414,3 +1414,36 @@ dialog.lookup {
   font: inherit;
   line-height: 1.8;
 }
+.crumbs .path-shortcut {
+  border: 1px solid var(--line);
+  padding: 4px 9px;
+  min-height: 32px;
+  font-size: 12px;
+}
+.path-shortcut svg {
+  width: 15px;
+  height: 15px;
+}
+.crumb-divider {
+  opacity: 0.6;
+  margin-inline: 2px;
+}
+.items li[data-drop-active] > button,
+.crumbs button[data-drop-active] {
+  outline: 2px solid var(--green);
+  outline-offset: -2px;
+  background: #dceee1;
+}
+.move-confirm dl {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 8px 12px;
+  margin: 16px 0;
+}
+.move-confirm dt {
+  color: var(--muted);
+}
+.move-confirm dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}

@@ -368,7 +368,14 @@ test('team approval, space access and original file lifecycle', async (t) => {
   );
   assert.deepEqual(await search('회의록'), []);
   assert.equal((await search('report_100%'))[0].id, id);
-  assert.equal((await change(id, 'move', { parent })).status, 204);
+  assert.equal(
+    (await change(id, 'move', { parent, expectedParent: root })).status,
+    409,
+  );
+  assert.equal(
+    (await change(id, 'move', { parent, expectedParent: child })).status,
+    204,
+  );
   assert.equal((await folderRows(child)).length, 0);
   assert.equal(
     (await folderRows(parent)).find((x: { id: string }) => x.id === id)
