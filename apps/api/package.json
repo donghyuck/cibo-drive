@@ -21,6 +21,7 @@
     "@types/express": "^5",
     "@types/node": "^24",
     "@types/pg": "^8",
+    "playwright-core": "^1.65.1",
     "tsx": "^4"
   }
 }

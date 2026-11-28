@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type DragEvent } from 'react';
 import {
   Eye,
+  FolderInput,
   Ellipsis,
   Trash2,
   ArrowDownAZ,
@@ -69,6 +70,7 @@ export function FileBrowser({
     null,
   );
   const [lookup, setLookup] = useState<'search' | 'trash' | null>(null);
+  const [moveFrom, setMoveFrom] = useState<string | null>(null);
   const [managed, setManaged] = useState<DriveItem | null>(null);
   const [revision, setRevision] = useState(0);
   const [query, setQuery] = useState('');
@@ -580,6 +582,20 @@ export function FileBrowser({
                     )}
                     {writable && (
                       <span className="item-menu">
+                        {!item.folder && (
+                          <button
+                            className="icon quick-move"
+                            aria-label={item.name + ' 폴더로 이동'}
+                            title="폴더로 이동"
+                            onClick={() => {
+                              setMoveFrom(current.id);
+                              setManaged(item);
+                            }}
+                          >
+                            <FolderInput />
+                            <span>이동</span>
+                          </button>
+                        )}
                         <button
                           className="icon"
                           aria-label={item.name + ' 관리'}
@@ -658,9 +674,14 @@ export function FileBrowser({
       {managed && (
         <EntryTools
           item={managed}
+          moveFrom={moveFrom}
           restore={lookup === 'trash'}
-          close={() => setManaged(null)}
+          close={() => {
+            setManaged(null);
+            setMoveFrom(null);
+          }}
           changed={() => {
+            setMoveFrom(null);
             setManaged(null);
             setRevision((n) => n + 1);
             void perform(async () => {

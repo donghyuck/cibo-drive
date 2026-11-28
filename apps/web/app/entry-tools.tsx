@@ -28,16 +28,20 @@ const titles = {
 export function EntryTools({
   item,
   restore,
+  moveFrom,
   close,
   changed,
 }: {
   item: DriveItem;
   restore: boolean;
+  moveFrom: string | null;
   close: () => void;
   changed: () => void;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
-  const [action, setAction] = useState<Action>(restore ? 'restore' : 'rename');
+  const [action, setAction] = useState<Action>(
+    restore ? 'restore' : moveFrom ? 'move' : 'rename',
+  );
   const [name, setName] = useState(item.name),
     [parent, setParent] = useState('');
   const [folders, setFolders] = useState<{ id: string; path: string[] }[]>([]);
@@ -69,7 +73,11 @@ export function EntryTools({
     try {
       await post(
         'entries/' + item.id + '/' + action,
-        action === 'move' ? { parent } : action === 'trash' ? {} : { name },
+        action === 'move'
+          ? { parent, expectedParent: moveFrom ?? undefined }
+          : action === 'trash'
+            ? {}
+            : { name },
       );
       changed();
     } catch (e) {
@@ -95,7 +103,13 @@ export function EntryTools({
         }}
       >
         <header>
-          <h2 id="entry-title">{restore ? '휴지통에서 복원' : '항목 관리'}</h2>
+          <h2 id="entry-title">
+            {restore
+              ? '휴지통에서 복원'
+              : moveFrom
+                ? '폴더로 이동'
+                : '항목 관리'}
+          </h2>
           <button
             className="icon"
             type="button"
@@ -107,7 +121,7 @@ export function EntryTools({
           </button>
         </header>
         <p className="item-context">{item.name}</p>
-        {!restore && (
+        {!restore && !moveFrom && (
           <div className="entry-actions">
             {(['rename', 'move', 'trash'] as const).map((a) => (
               <button
@@ -152,11 +166,13 @@ export function EntryTools({
               onChange={(e) => setParent(e.target.value)}
             >
               <option value="">폴더 선택</option>
-              {folders.map((f) => (
-                <option key={f.id} value={f.id}>
-                  {f.path.join(' / ')}
-                </option>
-              ))}
+              {folders
+                .filter((f) => f.id !== moveFrom)
+                .map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.path.join(' / ')}
+                  </option>
+                ))}
             </select>
           </label>
         )}
