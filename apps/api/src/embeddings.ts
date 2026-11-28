@@ -52,9 +52,11 @@ export function embeddingProvider(env: NodeJS.ProcessEnv) {
   };
 }
 
-type Provider = NonNullable<ReturnType<typeof embeddingProvider>>;
+export type EmbeddingProvider = NonNullable<
+  ReturnType<typeof embeddingProvider>
+>;
 
-export async function indexNext(db: pg.Pool, provider: Provider) {
+export async function indexNext(db: pg.Pool, provider: EmbeddingProvider) {
   return transaction(db, async (client) => {
     const {
       rows: [job],
@@ -124,7 +126,7 @@ export async function retryIndex(db: pg.Pool, id: string) {
   return result.rowCount === 1;
 }
 
-export function startIndexing(db: pg.Pool, provider: Provider) {
+export function startIndexing(db: pg.Pool, provider: EmbeddingProvider) {
   async function tick() {
     let more = false;
     try {

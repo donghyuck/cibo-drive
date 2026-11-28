@@ -69,7 +69,18 @@ test('team approval, space access and original file lifecycle', async (t) => {
   );
   const app = express();
   const origin = 'http://127.0.0.1:3000';
+  const provider = env.CIBO_TEST_EMBED_URL
+    ? embeddingProvider({
+        CIBO_EMBED_URL: env.CIBO_TEST_EMBED_URL,
+        CIBO_EMBED_MODEL: env.CIBO_TEST_EMBED_MODEL,
+        CIBO_EMBED_DIMENSIONS: env.CIBO_TEST_EMBED_DIMENSIONS,
+      })!
+    : {
+        model: 'fixture@2',
+        embed: async (texts: string[]) => texts.map((text) => [text.length, 1]),
+      };
   const settings: Settings = {
+    embeddings: provider,
     db,
     s3,
     bucket: env.S3_BUCKET,
@@ -201,6 +212,7 @@ test('team approval, space access and original file lifecycle', async (t) => {
     'list_folder',
     'read_file_text',
     'search_files',
+    'search_passages',
   ]);
   const call = (name: string, args: Record<string, unknown> = {}) =>
     client.callTool({ name, arguments: args });
@@ -295,16 +307,6 @@ test('team approval, space access and original file lifecycle', async (t) => {
   assert.equal(await rebuildPassages(db, id), true);
   assert.deepEqual(await passages(), expectedPassages);
   // Enable indexing after the first file already has passages.
-  const provider = env.CIBO_TEST_EMBED_URL
-    ? embeddingProvider({
-        CIBO_EMBED_URL: env.CIBO_TEST_EMBED_URL,
-        CIBO_EMBED_MODEL: env.CIBO_TEST_EMBED_MODEL,
-        CIBO_EMBED_DIMENSIONS: env.CIBO_TEST_EMBED_DIMENSIONS,
-      })!
-    : {
-        model: 'fixture@2',
-        embed: async (texts: string[]) => texts.map((text) => [text.length, 1]),
-      };
   const vectorsFor = async (fileId: string) =>
     (
       await db.query(
@@ -319,6 +321,16 @@ test('team approval, space access and original file lifecycle', async (t) => {
     [false, true],
   );
   const initialIndex = await vectorsFor(id);
+  const evidence = async () =>
+    (await readTool('search_passages', { question: '어떤 기록이 남았나요?' }))
+      .results;
+  const [hit] = await evidence();
+  assert.equal(hit.fileId, id);
+  assert.equal(hit.name, '회의록.md');
+  assert.deepEqual([hit.unit, hit.start, hit.end], ['line', 1, 1]);
+  assert.equal(hit.text, data.trim());
+  assert.equal(hit.downloadUrl, new URL('/api/files/' + id, origin).href);
+  assert.equal(await (await request('files/' + id, member)).text(), data);
   assert.equal(initialIndex.length, 1);
   assert.equal(await retryIndex(db, id), false);
   assert.equal((await upload('회의록.md', '다른 내용')).status, 409);
@@ -640,6 +652,35 @@ test('team approval, space access and original file lifecycle', async (t) => {
   );
   assert.deepEqual(await vectorsFor(id), initialIndex);
   assert.equal(await indexNext(db, provider), false);
+  const top = await readTool('search_passages', {
+    question: latestText.text,
+    limit: 1,
+  });
+  assert.equal(top.results.length, 1);
+  assert.equal(top.results[0].fileId, bookId);
+  assert.equal(top.results[0].unit, 'chapter');
+  // An indexed file in a different space must not appear even with an exact query.
+  await db.query("INSERT INTO doc_space VALUES (2,'분리된 공간')");
+  const foreignRoot = (
+    await db.query(
+      "INSERT INTO doc_artcl(doc_space_idntfr,artcl_nm) VALUES (2,'다른 루트') RETURNING artcl_idntfr",
+    )
+  ).rows[0].artcl_idntfr;
+  await db.query(
+    'UPDATE doc_artcl SET doc_space_idntfr=2,up_artcl_idntfr=$1 WHERE artcl_idntfr=$2',
+    [foreignRoot, bookId],
+  );
+  const scoped = await readTool('search_passages', {
+    question: latestText.text,
+  });
+  assert.deepEqual(
+    scoped.results.map((hit: { fileId: string }) => hit.fileId),
+    [id],
+  );
+  await db.query(
+    'UPDATE doc_artcl SET doc_space_idntfr=1,up_artcl_idntfr=$1 WHERE artcl_idntfr=$2',
+    [child, bookId],
+  );
   const contents = await (await request(bookPath + '/chapters', member)).json();
   assert.equal(contents.status, 'ready');
   assert.deepEqual(
@@ -680,6 +721,11 @@ test('team approval, space access and original file lifecycle', async (t) => {
   assert.equal(thumb.headers.get('content-type'), 'image/jpeg');
   assert.equal(Buffer.from(await thumb.arrayBuffer()).readUInt16BE(0), 0xffd8);
   await change(bookId, 'trash');
+  assert.ok(
+    (await evidence()).every(
+      (hit: { fileId: string }) => hit.fileId !== bookId,
+    ),
+  );
   assert.equal((await request(bookPath + '/thumbnail', member)).status, 404);
   assert.equal((await request(bookPath + '/chapters', member)).status, 404);
   assert.equal(

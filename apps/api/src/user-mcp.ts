@@ -110,7 +110,18 @@ async function tool(work: () => Promise<object>) {
     };
   }
 }
-function userServer({ db, origin, s3, bucket }: Settings, space: number) {
+const tokenAccess = (
+  parameter: '$1' | '$5',
+) => `SELECT a.acnt_stts_cd AS status,t.doc_space_idntfr AS space,m.acnt_idntfr AS member
+      FROM mcp_acs_tkn t JOIN user_acnt a USING(acnt_idntfr)
+      LEFT JOIN doc_space_acs_authrt m ON m.acnt_idntfr=a.acnt_idntfr AND m.doc_space_idntfr=t.doc_space_idntfr
+      WHERE t.tkn_sha256=${parameter} AND t.expry_dt>now()`;
+
+function userServer(
+  { db, origin, s3, bucket, embeddings }: Settings,
+  space: number,
+  tokenHash: string,
+) {
   const server = new McpServer(
     { name: 'cibo-drive', version: '1.0.0' },
     {
@@ -160,6 +171,53 @@ function userServer({ db, origin, s3, bucket }: Settings, space: number) {
         ),
       ),
   );
+  if (embeddings)
+    server.registerTool(
+      'search_passages',
+      {
+        description:
+          'Find supporting passages by natural-language question. The question is sent to the configured embedding provider. Results include the source location and a web URL that requires login.',
+        inputSchema: {
+          question: z.string().trim().min(1).max(2000),
+          limit: z.number().int().min(1).max(10).default(5),
+        },
+        annotations: { ...annotations, openWorldHint: true },
+      },
+      ({ question, limit }) =>
+        tool(async () => {
+          const [vector] = await embeddings.embed([question]);
+          // Recheck the token after remote inference, in the same snapshot as the passages.
+          const access = tokenAccess('$5');
+          const { rows } = await db.query(
+            tree +
+              `,
+        permitted AS (${access}), ranked AS (
+          SELECT f.artcl_idntfr, f.artcl_nm, f.path, i.sctn_sn, sim.score
+          FROM tree f JOIN doc_artcl_txt t USING(artcl_idntfr)
+          JOIN doc_sctn_idx i USING(artcl_idntfr)
+          CROSS JOIN LATERAL (
+            SELECT sum(x::float8*y) / nullif(sqrt(sum(x::float8*x)*sum(y::float8*y)),0) AS score
+            FROM unnest(i.emb_vctr,$2::real[]) AS v(x,y)
+          ) sim
+          WHERE EXISTS (SELECT 1 FROM permitted WHERE status='active' AND member IS NOT NULL AND space=$1)
+          AND t.idx_stts_cd='ready' AND t.prcs_stts_cd='ready' AND t.idx_mdl_nm=$3
+          AND f.s3_objt_key IS NOT NULL AND cardinality(i.emb_vctr)=cardinality($2::real[]) AND sim.score IS NOT NULL
+          ORDER BY sim.score DESC,f.artcl_idntfr,i.sctn_sn LIMIT $4
+        )
+        SELECT r.artcl_idntfr AS "fileId",r.artcl_nm AS name,r.path,r.score,t.srch_sctn_list->r.sctn_sn AS passage
+        FROM ranked r JOIN doc_artcl_txt t USING(artcl_idntfr)
+        ORDER BY r.score DESC,r.artcl_idntfr,r.sctn_sn`,
+            [space, vector, embeddings.model, limit, tokenHash],
+          );
+          return {
+            results: rows.map(({ passage, ...file }) => ({
+              ...file,
+              ...passage,
+              downloadUrl: new URL('/api/files/' + file.fileId, origin).href,
+            })),
+          };
+        }),
+    );
   server.registerTool(
     'get_file_metadata',
     {
@@ -227,16 +285,9 @@ export function mcpEndpoint(settings: Settings) {
     const match = /^Bearer (cibo_mcp_[A-Za-z0-9_-]{43})$/i.exec(
       req.headers.authorization ?? '',
     );
-    const row = match
-      ? (
-          await settings.db.query(
-            `SELECT a.acnt_stts_cd AS status,t.doc_space_idntfr AS space,m.acnt_idntfr AS member
-      FROM mcp_acs_tkn t JOIN user_acnt a USING(acnt_idntfr)
-      LEFT JOIN doc_space_acs_authrt m ON m.acnt_idntfr=a.acnt_idntfr AND m.doc_space_idntfr=t.doc_space_idntfr
-      WHERE t.tkn_sha256=$1 AND t.expry_dt>now()`,
-            [digest(match[1])],
-          )
-        ).rows[0]
+    const tokenHash = match ? digest(match[1]) : null;
+    const row = tokenHash
+      ? (await settings.db.query(tokenAccess('$1'), [tokenHash])).rows[0]
       : null;
     if (!row)
       return res
@@ -245,10 +296,15 @@ export function mcpEndpoint(settings: Settings) {
     if (row.status !== 'active' || !row.member) return res.sendStatus(403);
     if (req.method !== 'POST') return res.set('Allow', 'POST').sendStatus(405);
     res.locals.mcpSpace = row.space;
+    res.locals.mcpTokenHash = tokenHash;
     next();
   });
   r.post('/', express.json({ limit: '32kb' }), async (req, res, next) => {
-    const server = userServer(settings, res.locals.mcpSpace);
+    const server = userServer(
+      settings,
+      res.locals.mcpSpace,
+      res.locals.mcpTokenHash,
+    );
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
       enableJsonResponse: true,
