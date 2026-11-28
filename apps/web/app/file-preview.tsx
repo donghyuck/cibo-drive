@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ArrowDownToLine, Maximize2, Minimize2, X } from 'lucide-react';
+import type { EvidenceHit } from './evidence-search';
 import { DocumentSources } from './document-sources';
 import { EpubReader } from './epub-reader';
 import dynamic from 'next/dynamic';
@@ -14,9 +15,11 @@ const limit = 100_000;
 
 export function FilePreview({
   file,
+  source,
   writable,
   close,
 }: {
+  source?: EvidenceHit;
   file: { id: string; name: string };
   writable: boolean;
   close: () => void;
@@ -24,8 +27,12 @@ export function FilePreview({
   const dialog = useRef<HTMLDialogElement>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [expanded, setExpanded] = useState(false);
-  const [sources, setSources] = useState(false);
-  const [pdfPage, setPdfPage] = useState<number | null>(null);
+  const [sources, setSources] = useState(
+    source?.unit === 'line' || source?.unit === 'paragraph',
+  );
+  const [pdfPage, setPdfPage] = useState<number | null>(
+    source?.unit === 'page' ? source.start : null,
+  );
   const resizeLabel = expanded ? '기본 크기로 복원' : '전체 화면으로 확대';
   const src = '/api/files/' + encodeURIComponent(file.id);
   const url = src + '/preview';
@@ -153,6 +160,7 @@ export function FilePreview({
       <div className="preview-body" key={String(sources)}>
         {sources ? (
           <DocumentSources
+            initialOffset={source?.segment}
             fileId={file.id}
             writable={writable}
             openPage={(n) => {
@@ -165,7 +173,11 @@ export function FilePreview({
         ) : preview.kind === 'error' ? (
           <p role="alert">{preview.message}</p>
         ) : preview.kind === 'epub' ? (
-          <EpubReader fileId={file.id} writable={writable} />
+          <EpubReader
+            initialSource={source}
+            fileId={file.id}
+            writable={writable}
+          />
         ) : preview.kind === 'pdf' ? (
           <object
             type="application/pdf"

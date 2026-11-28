@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type DragEvent } from 'react';
 import {
   Eye,
+  MessageCircleQuestion,
   FolderInput,
   Ellipsis,
   Trash2,
@@ -21,6 +22,7 @@ import {
 } from 'lucide-react';
 import { EntryTools, SpaceLookup, type DriveItem } from './entry-tools';
 import { MoveConfirmation, type MoveRequest } from './move-confirmation';
+import { EvidenceSearch, type EvidenceHit } from './evidence-search';
 import { FilePreview } from './file-preview';
 import { api, post } from './drive-api';
 
@@ -67,10 +69,12 @@ export function FileBrowser({
 }) {
   const [folder, setFolder] = useState(initial);
   const [trail, setTrail] = useState([initial.current]);
-  const [preview, setPreview] = useState<Pick<DriveItem, 'id' | 'name'> | null>(
+  const [preview, setPreview] = useState<
+    (Pick<DriveItem, 'id' | 'name'> & { source?: EvidenceHit }) | null
+  >(null);
+  const [lookup, setLookup] = useState<'search' | 'trash' | 'evidence' | null>(
     null,
   );
-  const [lookup, setLookup] = useState<'search' | 'trash' | null>(null);
   const [moveFrom, setMoveFrom] = useState<string | null>(null);
   const [managed, setManaged] = useState<DriveItem | null>(null);
   const [revision, setRevision] = useState(0);
@@ -288,6 +292,10 @@ export function FileBrowser({
           />
         </div>
         <div className="space-tools">
+          <button onClick={() => setLookup('evidence')}>
+            <MessageCircleQuestion />
+            질문 검색
+          </button>
           <button onClick={() => setLookup('search')}>
             <Search />
             전체 공간 검색
@@ -671,7 +679,15 @@ export function FileBrowser({
           }}
         />
       )}
-      {lookup && (
+      {lookup === 'evidence' && (
+        <EvidenceSearch
+          close={() => setLookup(null)}
+          open={(hit) =>
+            setPreview({ id: hit.fileId, name: hit.name, source: hit })
+          }
+        />
+      )}
+      {lookup && lookup !== 'evidence' && (
         <SpaceLookup
           mode={lookup}
           writable={writable}
@@ -711,6 +727,7 @@ export function FileBrowser({
         <FilePreview
           key={preview.id}
           file={preview}
+          source={preview.source}
           writable={writable}
           close={() => setPreview(null)}
         />
