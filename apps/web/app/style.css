@@ -1475,3 +1475,11 @@ dialog.lookup {
     grid-template-columns: 32px minmax(0, 1fr) 72px;
   }
 }
+
+.folder-count {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+  margin-top: 2px;
+}

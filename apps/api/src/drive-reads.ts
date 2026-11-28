@@ -33,6 +33,20 @@ export async function listFolder(
     `SELECT ${fields} ${cards ? ",(SELECT jsonb_build_object('image',t.thmb_img IS NOT NULL,'excerpt',t.thmb_cn,'pending',NOT t.thmb_prcs_yn) FROM doc_artcl_txt t WHERE t.artcl_idntfr=doc_artcl.artcl_idntfr) AS thumbnail" : ''} FROM doc_artcl WHERE up_artcl_idntfr=$1 AND doc_space_idntfr=$2 AND del_grp_idntfr IS NULL ORDER BY folder DESC,artcl_nm,artcl_idntfr LIMIT $3 OFFSET $4`,
     [current.id, space, limit, offset],
   );
+  const folders = entries.filter((item) => item.folder);
+  if (folders.length) {
+    const { rows } = await db.query(
+      `WITH RECURSIVE contents(bucket,id,is_file) AS (
+      SELECT a.up_artcl_idntfr,a.artcl_idntfr,a.s3_objt_key IS NOT NULL FROM doc_artcl a
+      WHERE a.up_artcl_idntfr=ANY($1::uuid[]) AND a.doc_space_idntfr=$2 AND a.del_grp_idntfr IS NULL
+      UNION ALL SELECT c.bucket,a.artcl_idntfr,a.s3_objt_key IS NOT NULL FROM contents c
+      JOIN doc_artcl a ON a.up_artcl_idntfr=c.id WHERE NOT c.is_file AND a.doc_space_idntfr=$2 AND a.del_grp_idntfr IS NULL)
+      SELECT bucket,count(*)::int AS files FROM contents WHERE is_file GROUP BY bucket`,
+      [folders.map((item) => item.id), space],
+    );
+    const counts = new Map(rows.map((row) => [row.bucket, row.files]));
+    for (const item of folders) item.file_count = counts.get(item.id) ?? 0;
+  }
   return { current, entries };
 }
 export async function searchFiles(

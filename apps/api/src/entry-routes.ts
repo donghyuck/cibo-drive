@@ -25,7 +25,10 @@ export function entryRoutes(db: pg.Pool) {
   r.get('/destinations/:id', async (req, res) => {
     const { rows } = await db.query(
       tree +
-        ` SELECT artcl_idntfr AS id,path FROM tree
+        `, counts AS (SELECT parent,count(*)::int AS files FROM tree
+        CROSS JOIN LATERAL unnest(ids[1:cardinality(ids)-1]) AS ancestors(parent)
+        WHERE s3_objt_key IS NOT NULL GROUP BY parent)
+      SELECT artcl_idntfr AS id,path,coalesce(files,0) AS file_count FROM tree LEFT JOIN counts ON parent=artcl_idntfr
       WHERE s3_objt_key IS NULL AND NOT ($2::uuid=ANY(ids)) ORDER BY path`,
       [res.locals.user.space_id, req.params.id],
     );

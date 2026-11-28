@@ -378,6 +378,16 @@ test('team approval, space access and original file lifecycle', async (t) => {
   );
   assert.equal((await folderRows(child)).length, 0);
   assert.equal(
+    (await folderRows(parent)).find((x: { id: string }) => x.id === child)
+      .file_count,
+    0,
+  );
+  assert.equal(
+    (await folderRows(root)).find((x: { id: string }) => x.id === parent)
+      .file_count,
+    1,
+  );
+  assert.equal(
     (await folderRows(parent)).find((x: { id: string }) => x.id === id)
       .registered_at,
     registered,
@@ -398,6 +408,13 @@ test('team approval, space access and original file lifecycle', async (t) => {
   assert.equal(
     (await readTool('get_file_metadata', { fileId: id })).name,
     'Report_100%.md',
+  );
+  const destinations = await (
+    await request('destinations/' + id, member)
+  ).json();
+  assert.equal(
+    destinations.find((x: { id: string }) => x.id === root).file_count,
+    1,
   );
   assert.equal((await change(child, 'trash')).status, 204);
   assert.equal((await change(parent, 'trash')).status, 204);

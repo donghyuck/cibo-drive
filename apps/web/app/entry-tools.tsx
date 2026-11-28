@@ -44,7 +44,9 @@ export function EntryTools({
   );
   const [name, setName] = useState(item.name),
     [parent, setParent] = useState('');
-  const [folders, setFolders] = useState<{ id: string; path: string[] }[]>([]);
+  const [folders, setFolders] = useState<
+    { id: string; path: string[]; file_count: number }[]
+  >([]);
   const [busy, setBusy] = useState(false),
     [error, setError] = useState('');
   useEffect(() => {
@@ -170,7 +172,7 @@ export function EntryTools({
                 .filter((f) => f.id !== moveFrom)
                 .map((f) => (
                   <option key={f.id} value={f.id}>
-                    {f.path.join(' / ')}
+                    {f.path.join(' / ')} · 하위 포함 파일 {f.file_count}개
                   </option>
                 ))}
             </select>

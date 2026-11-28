@@ -33,6 +33,7 @@ export type Folder = {
     id: string;
     name: string;
     folder: boolean;
+    file_count?: number;
     size: number | null;
     registered_at: string | null;
     thumbnail?: {
@@ -512,7 +513,16 @@ export function FileBrowser({
                         </span>
                       )}
                     </span>
-                    <span className="filename">{item.name}</span>
+                    <span className="filename">
+                      <span>{item.name}</span>
+                      {item.folder && item.file_count !== undefined && (
+                        <small className="folder-count">
+                          {item.file_count === 0
+                            ? '파일 없음'
+                            : `하위 포함 파일 ${item.file_count}개`}
+                        </small>
+                      )}
+                    </span>
                     <span className="kind">{type}</span>
                     <span className="entry-meta">
                       <span
