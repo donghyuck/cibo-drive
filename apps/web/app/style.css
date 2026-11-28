@@ -1506,3 +1506,14 @@ dialog.lookup {
   font-weight: 400;
   margin-top: 2px;
 }
+
+.space-tools { flex-wrap: wrap; }
+.evidence-input { display: flex; gap: 8px; align-items: stretch; }
+.evidence-input input { flex: 1; min-width: 0; }
+.evidence-input button { white-space: nowrap; }
+.evidence .evidence-hit {
+  width: 100%; display: grid; gap: 6px; text-align: left;
+  padding: 12px; border: 0; overflow-wrap: anywhere;
+}
+.evidence-hit small svg { vertical-align: middle; }
+.evidence-hit span { white-space: pre-wrap; font-weight: 400; line-height: 1.6; }

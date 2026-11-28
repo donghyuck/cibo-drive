@@ -1,5 +1,6 @@
 import { HttpError, nameOf, transaction, lockSpace } from './drive-db.js';
 import { listFolder, folder, readText, bookContents } from './drive-reads.js';
+import { searchPassages } from './evidence-search.js';
 import { mcpEndpoint, tokenRoutes } from './user-mcp.js';
 import { entryRoutes } from './entry-routes.js';
 import express, { type Request, type Response } from 'express';
@@ -188,12 +189,40 @@ export function driveRouter(settings: Settings) {
     res.sendStatus(204);
   });
 
-  router.use((req, res, next) => {
-    const u = res.locals.user;
+  router.use((_req, res, next) => {
+    if (res.locals.user.status !== 'active' || !res.locals.user.space_id)
+      throw new HttpError(403, '문서 공간 권한이 필요합니다.');
+    next();
+  });
+  router.post('/search/passages', async (req, res) => {
+    const question = req.body?.question;
     if (
-      u.status !== 'active' ||
-      !u.space_id ||
-      (!['GET', 'HEAD'].includes(req.method) && u.role === 'viewer')
+      typeof question !== 'string' ||
+      !question.trim() ||
+      question.trim().length > 2000
+    )
+      throw new HttpError(400, '질문을 1~2,000자로 입력하세요.');
+    if (!settings.embeddings)
+      throw new HttpError(
+        503,
+        '질문 검색용 임베딩 모델이 설정되지 않았습니다.',
+      );
+    res.json(
+      await searchPassages(
+        db,
+        settings.embeddings,
+        origin,
+        res.locals.user.space_id,
+        { kind: 'web', hash: digest(req) },
+        question.trim(),
+        5,
+      ),
+    );
+  });
+  router.use((req, res, next) => {
+    if (
+      !['GET', 'HEAD'].includes(req.method) &&
+      res.locals.user.role === 'viewer'
     )
       throw new HttpError(403, '문서 공간 권한이 필요합니다.');
     next();

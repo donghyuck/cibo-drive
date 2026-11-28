@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, post } from './drive-api';
 
-type Section = {
+export type Section = {
   unit: 'page' | 'paragraph' | 'line' | 'chapter';
   start: number;
   end: number;
@@ -16,7 +16,7 @@ type TextPage = {
   offset: number;
   nextOffset: number | null;
 };
-function location(s: Section) {
+export function sourceLocation(s: Section) {
   const n = s.start === s.end ? String(s.start) : s.start + '–' + s.end;
   if (s.unit === 'chapter') return n + '장 · ' + s.chapterTitle;
   return n + { page: '페이지', paragraph: '문단', line: '줄' }[s.unit];
@@ -25,12 +25,14 @@ export function DocumentSources({
   fileId,
   writable,
   openPage,
+  initialOffset = 0,
 }: {
   fileId: string;
   writable: boolean;
+  initialOffset?: number;
   openPage: (n: number) => void;
 }) {
-  const [offset, setOffset] = useState(0),
+  const [offset, setOffset] = useState(initialOffset),
     [result, setResult] = useState<TextPage | null>(null),
     [error, setError] = useState(''),
     [revision, setRevision] = useState(0);
@@ -93,12 +95,12 @@ export function DocumentSources({
           {s.unit === 'page' ? (
             <button
               onClick={() => openPage(s.start)}
-              aria-label={location(s) + ' 원본 보기'}
+              aria-label={sourceLocation(s) + ' 원본 보기'}
             >
-              {location(s)} ↗
+              {sourceLocation(s)} ↗
             </button>
           ) : (
-            <strong>{location(s)}</strong>
+            <strong>{sourceLocation(s)}</strong>
           )}
           <pre>{s.text}</pre>
         </article>

@@ -17,9 +17,11 @@ type Contents = {
 
 export function EpubReader({
   fileId,
+  initialSource,
   writable,
 }: {
   fileId: string;
+  initialSource?: { start: number; segment: number };
   writable: boolean;
 }) {
   const path = 'files/' + encodeURIComponent(fileId);
@@ -54,6 +56,26 @@ export function EpubReader({
       try {
         const b: Contents = await api(path + '/chapters', { signal: c.signal });
         if (c.signal.aborted) return;
+        if (initialSource && b.status === 'ready') {
+          const i = b.chapters.findIndex(
+            (ch) => ch.number === initialSource.start,
+          );
+          if (i >= 0) {
+            const chapter = b.chapters[i];
+            setIndex(i);
+            setPage(
+              Math.floor(
+                Math.max(
+                  0,
+                  Math.min(
+                    chapter.count - 1,
+                    initialSource.segment - chapter.offset,
+                  ),
+                ) / 10,
+              ),
+            );
+          }
+        }
         setBook(b);
         if (b.status === 'processing') timer = setTimeout(load, 1500);
       } catch (e) {
@@ -66,7 +88,7 @@ export function EpubReader({
       c.abort();
       clearTimeout(timer);
     };
-  }, [path, attempt]);
+  }, [path, attempt, initialSource]);
   useEffect(() => {
     if (!chapter) return;
     const c = new AbortController();

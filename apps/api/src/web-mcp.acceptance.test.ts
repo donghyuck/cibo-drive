@@ -286,7 +286,13 @@ test(
         });
       }
     }
+    const webSearch = () =>
+      editor.request.post(origin + '/api/search/passages', {
+        headers: { Origin: origin },
+        data: question,
+      });
     async function blockedAccount() {
+      assert.equal((await webSearch()).status(), 403);
       await blockedLinks(403);
       for (const [name, args] of [
         ['search_passages', question],
@@ -304,6 +310,24 @@ test(
     }
     await accessible(existing);
     await button(editor, '팀 문서 공간').click();
+    await button(editor, '질문 검색').click();
+    const evidenceDialog = editor.getByRole('dialog', {
+      name: '질문으로 검색',
+    });
+    await evidenceDialog
+      .getByLabel('내 문서에 질문하기')
+      .fill(question.question);
+    await evidenceDialog
+      .getByRole('button', { name: '검색', exact: true })
+      .click();
+    await evidenceDialog
+      .getByRole('button', { name: new RegExp(existing) })
+      .click();
+    const cited = editor.getByRole('dialog', { name: existing });
+    await cited.getByText('1줄', { exact: true }).waitFor();
+    await cited.getByText(bytes.toString(), { exact: true }).waitFor();
+    await button(editor, '미리보기 닫기').click();
+    await evidenceDialog.getByRole('button', { name: '검색 닫기' }).click();
     await button(editor, existing + ' 관리').click();
     await editor.getByLabel('새 이름').fill(renamed);
     await editor.getByRole('dialog').locator('footer button.primary').click();
@@ -348,6 +372,7 @@ test(
       .click();
     await button(editor, '휴지통으로 이동').click();
     await button(editor, renamed + ' 미리보기').waitFor({ state: 'hidden' });
+    assert.deepEqual(await (await webSearch()).json(), { results: [] });
     const hidden = await call('search_passages', question);
     assert.ok(!hidden.isError);
     assert.deepEqual(hidden.content, [
